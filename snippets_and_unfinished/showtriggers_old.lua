@@ -43,6 +43,11 @@ if SERVER then
 
 	local function SetupTriggers()
 		for ent, kv in next, showtriggers_triggers do
+			if not IsValid(ent) then
+				showtriggers_triggers[ent] = nil
+				continue
+			end
+
 			local classname = ent:GetClass()
 			local type = TYPE_UNKNOWN
 
@@ -134,6 +139,6 @@ elseif CLIENT then
 		net.Start(TAG)
 		net.SendToServer()
 	end
-	concommand.Add("sm_showtriggers", RequestTriggers)
-	concommand.Add("sm_triggers", RequestTriggers)
+	concommand.Add("sm_showtriggers_old", RequestTriggers)
+	concommand.Add("sm_triggers_old", RequestTriggers)
 end
