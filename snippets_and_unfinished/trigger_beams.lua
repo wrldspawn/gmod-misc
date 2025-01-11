@@ -103,13 +103,13 @@ add:
 {
 	"classname" "info_target"
 	"origin" "%s"
-	"tragetname" "%s_start"
+	"targetname" "%s_start"
 }
 add:
 {
 	"classname" "info_target"
 	"origin" "%s"
-	"tragetname" "%s_end"
+	"targetname" "%s_end"
 }
 add:
 {
