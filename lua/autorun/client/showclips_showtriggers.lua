@@ -91,16 +91,25 @@ local function VerticiesFromPlanes(planes)
 		end
 	end
 
-	print("verts", #verts)
+	--print("verts", #verts)
 	local deduped = dedupe(verts)
-	print("deduped verts", #deduped)
+	--print("deduped verts", #deduped)
 
 	return deduped
 end
 
 local brushes = {}
 for _, brush in ipairs(NikNaks.CurrentMap:GetBrushes()) do
-	if not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
+	local invis = true
+	for i = 1, brush.numsides do
+		local tex = brush:GetTexture(i)
+		if tex:lower() ~= "tools/toolsinvisible" then
+			invis = false
+			break
+		end
+	end
+
+	if invis == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
 
 	brushes[#brushes + 1] = brush
 end
@@ -167,7 +176,7 @@ for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
 	local faces = bmodels[model]:GetFaces()
 	local faceCount = #faces
 
-	print(model, faceCount)
+	--print(model, faceCount)
 
 	local planes = {}
 	for _, face in ipairs(faces) do
@@ -177,7 +186,7 @@ for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
 	local verts = VerticiesFromPlanes(planes)
 	local vertCount = #verts
 	if vertCount == 0 then
-		print(model, faceCount, "FAIL")
+		--print(model, faceCount, "FAIL")
 		continue
 	end
 
@@ -190,14 +199,14 @@ for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
 
 		local points = {}
 
-		print(model, faceStr, "verts: " .. vertCount)
+		--print(model, faceStr, "verts: " .. vertCount)
 		for _, vert in ipairs(verts) do
 			local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
 			if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
 
 			points[#points + 1] = vert
 		end
-		print(model, faceStr, "points: " .. #points)
+		--print(model, faceStr, "points: " .. #points)
 
 		-- sort them in clockwise order
 		local c = points[1]
@@ -213,7 +222,7 @@ for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
 			sidePoints[#sidePoints + 1] = points[i + 2] + norm * 0
 		end
 
-		print(model, faceStr, "sidePoints: " .. #sidePoints)
+		--print(model, faceStr, "sidePoints: " .. #sidePoints)
 		-- somehow ended up with empty sides
 		if #sidePoints > 0 then
 			brush_verts[#brush_verts + 1] = sidePoints
@@ -221,7 +230,7 @@ for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
 		end
 	end
 
-	print(model, "faces: " .. faceCount, "brushVerts: " .. #brush_verts)
+	--print(model, "faces: " .. faceCount, "brushVerts: " .. #brush_verts)
 
 	local origin = trigger.origin
 	for _, side in ipairs(brush_verts) do
@@ -261,6 +270,9 @@ for _, brush in ipairs(clipBrushes) do
 	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
 		b = 0
 	end
+	if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
+		b = 128
+	end
 
 	local vertCount = 0
 	for _, side in ipairs(brush) do
@@ -291,6 +303,9 @@ for _, brush in ipairs(clipBrushes) do
 	end
 	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
 		b = 0
+	end
+	if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
+		b = 128
 	end
 
 	local vertCount = 0
@@ -377,9 +392,9 @@ local function classify_trigger(brush)
 		if brush.outputs.OnEndTouch then
 			for _, data in ipairs(brush.outputs.OnEndTouch) do
 				if
-						data:find("gravity -") -- Gravity booster https://gamebanana.com/prefabs/6677.
-						or
-						data:find("basevelocity") -- Basevelocity booster https://gamebanana.com/prefabs/7118.
+					data:find("gravity -") -- Gravity booster https://gamebanana.com/prefabs/6677.
+					or
+					data:find("basevelocity") -- Basevelocity booster https://gamebanana.com/prefabs/7118.
 				then
 					type = TYPE_SPEED
 					break
