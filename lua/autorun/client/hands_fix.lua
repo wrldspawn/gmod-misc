@@ -7,8 +7,10 @@ local binds = {
 hook.Add("PlayerBindPress", "hands_use_fix", function(ply, bind, pressed, code)
 	if binds[bind] and pressed then
 		local hands = ply:GetHands()
+		if not IsValid(hands) then return end
 		local mdl = hands:GetModel()
 		timer.Simple(0.05, function()
+			if not IsValid(hands) then return end
 			hands:SetModel("")
 			hands:SetModel(mdl)
 		end)
