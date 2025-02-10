@@ -30,5 +30,8 @@ function debug.Trace()
     else
       MsgN(Format("%s%i. %s - %s:%i", indent, index, info.name or "???", info.short_src or "???", info.currentline or -1))
     end
+
+    level = level + 1
   end
 end
+
