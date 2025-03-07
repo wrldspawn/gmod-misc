@@ -20,8 +20,27 @@ local _tableTypes = getupvalues(ParseEntity)._tableTypes
 _tableTypes.OnEndTouch = true
 NikNaks.CurrentMap._entities = nil
 
--- functions translated to niknaks from https://github.com/h3xcat/gmod-luabsp/blob/master/luabsp.lua
+local function dedupe(verts)
+	local dedupedVerts = {}
+	for _, v1 in ipairs(verts) do
+		local exists = false
+		for _, v2 in ipairs(dedupedVerts) do
+			local sub = v1 - v2
+			if sub:LengthSqr() < 0.001 then
+				exists = true
+				break
+			end
+		end
 
+		if not exists then
+			dedupedVerts[#dedupedVerts + 1] = v1
+		end
+	end
+
+	return dedupedVerts
+end
+
+-- {{{ functions translated to niknaks from https://github.com/h3xcat/gmod-luabsp/blob/master/luabsp.lua
 local function PlaneIntersect(p1, p2, p3)
 	local norm1, d1 = p1.normal, p1.dist
 	local norm2, d2 = p2.normal, p2.dist
@@ -53,26 +72,6 @@ local function IsPointInside(planes, point)
 	return true
 end
 
-local function dedupe(verts)
-	local dedupedVerts = {}
-	for _, v1 in ipairs(verts) do
-		local exists = false
-		for _, v2 in ipairs(dedupedVerts) do
-			local sub = v1 - v2
-			if sub:LengthSqr() < 0.001 then
-				exists = true
-				break
-			end
-		end
-
-		if not exists then
-			dedupedVerts[#dedupedVerts + 1] = v1
-		end
-	end
-
-	return dedupedVerts
-end
-
 local function VerticiesFromPlanes(planes)
 	local verts = {}
 
@@ -91,12 +90,11 @@ local function VerticiesFromPlanes(planes)
 		end
 	end
 
-	--print("verts", #verts)
 	local deduped = dedupe(verts)
-	--print("deduped verts", #deduped)
 
 	return deduped
 end
+-- }}}
 
 local brushes = {}
 for _, brush in ipairs(NikNaks.CurrentMap:GetBrushes()) do
@@ -114,6 +112,8 @@ for _, brush in ipairs(NikNaks.CurrentMap:GetBrushes()) do
 	brushes[#brushes + 1] = brush
 end
 
+-- this implementation is not perfect but it at least works
+-- (theres a weird ring on surf_adrift_fix)
 local clipBrushes = {}
 for _, brush in ipairs(brushes) do
 	local planes = {}
@@ -162,8 +162,6 @@ for _, brush in ipairs(brushes) do
 	clipBrushes[#clipBrushes + 1] = brush_verts
 end
 
--- this is where the original code ends
-
 -- triggers
 local triggerBrushes = {}
 local bmodels = NikNaks.CurrentMap:GetBModels()
@@ -174,70 +172,19 @@ for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
 	if not bmodel then continue end
 
 	local faces = bmodels[model]:GetFaces()
-	local faceCount = #faces
-
-	--print(model, faceCount)
-
-	local planes = {}
-	for _, face in ipairs(faces) do
-		planes[#planes + 1] = face.plane
-	end
-
-	local verts = VerticiesFromPlanes(planes)
-	local vertCount = #verts
-	if vertCount == 0 then
-		--print(model, faceCount, "FAIL")
-		continue
-	end
 
 	local brush_verts = {}
-	for i, face in ipairs(faces) do
-		local plane = face.plane
-		local norm = plane.normal
 
-		local faceStr = "face: " .. i .. "/" .. faceCount
-
-		local points = {}
-
-		--print(model, faceStr, "verts: " .. vertCount)
+	for _, face in ipairs(faces) do
+		local verts = face:GenerateVertexTriangleData()
+		local side = {}
 		for _, vert in ipairs(verts) do
-			local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
-			if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
-
-			points[#points + 1] = vert
+			side[#side + 1] = vert.pos
 		end
-		--print(model, faceStr, "points: " .. #points)
-
-		-- sort them in clockwise order
-		local c = points[1]
-		table.sort(points, function(a, b)
-			local dot = norm:Dot((c - a):Cross(b - c))
-			return dot > 0.001
-		end)
-
-		local sidePoints = {}
-		for i = 1, #points - 2 do
-			sidePoints[#sidePoints + 1] = points[1] + norm * 0
-			sidePoints[#sidePoints + 1] = points[i + 1] + norm * 0
-			sidePoints[#sidePoints + 1] = points[i + 2] + norm * 0
-		end
-
-		--print(model, faceStr, "sidePoints: " .. #sidePoints)
-		-- somehow ended up with empty sides
-		if #sidePoints > 0 then
-			brush_verts[#brush_verts + 1] = sidePoints
-			sidePoints.norm = norm
-		end
+		brush_verts[#brush_verts + 1] = side
 	end
 
-	--print(model, "faces: " .. faceCount, "brushVerts: " .. #brush_verts)
-
-	local origin = trigger.origin
-	for _, side in ipairs(brush_verts) do
-		for _, point in ipairs(side) do
-			point:Add(origin)
-		end
-	end
+	--local origin = trigger.origin
 
 	brush_verts.classname = trigger.classname
 	brush_verts.outputs = {
@@ -392,9 +339,9 @@ local function classify_trigger(brush)
 		if brush.outputs.OnEndTouch then
 			for _, data in ipairs(brush.outputs.OnEndTouch) do
 				if
-					data:find("gravity -") -- Gravity booster https://gamebanana.com/prefabs/6677.
-					or
-					data:find("basevelocity") -- Basevelocity booster https://gamebanana.com/prefabs/7118.
+						data:find("gravity -") -- Gravity booster https://gamebanana.com/prefabs/6677.
+						or
+						data:find("basevelocity") -- Basevelocity booster https://gamebanana.com/prefabs/7118.
 				then
 					type = TYPE_SPEED
 					break
