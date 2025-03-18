@@ -165,8 +165,17 @@ end
 -- triggers
 local triggerBrushes = {}
 local bmodels = NikNaks.CurrentMap:GetBModels()
-for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("trigger_*")) do
+for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("^trigger_*")) do
+	if not trigger.model then
+		print("wtf")
+		PrintTable(trigger)
+		continue
+	end
 	local model = tonumber(trigger.model:sub(2))
+	if not model then
+		print("wtf", trigger.model)
+		continue
+	end
 	local bmodel = bmodels[model]
 
 	if not bmodel then continue end
@@ -210,6 +219,7 @@ for _, brush in ipairs(clipBrushes) do
 	local obj = Mesh()
 	local contents = brush.contents
 	local r = 255
+	local g = 0
 	local b = 255
 	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
 		r = 128
@@ -218,7 +228,7 @@ for _, brush in ipairs(clipBrushes) do
 		b = 0
 	end
 	if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
-		b = 128
+		g = 255
 	end
 
 	local vertCount = 0
@@ -229,7 +239,7 @@ for _, brush in ipairs(clipBrushes) do
 	mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
 	for _, side in ipairs(brush) do
 		for _, vert in ipairs(side) do
-			mesh.Color(r, 0, b, 32)
+			mesh.Color(r, g, b, 32)
 			mesh.Position(vert)
 			mesh.AdvanceVertex()
 		end
@@ -244,6 +254,7 @@ for _, brush in ipairs(clipBrushes) do
 	local obj = Mesh()
 	local contents = brush.contents
 	local r = 255
+	local g = 0
 	local b = 255
 	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
 		r = 128
@@ -252,7 +263,7 @@ for _, brush in ipairs(clipBrushes) do
 		b = 0
 	end
 	if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
-		b = 128
+		g = 255
 	end
 
 	local vertCount = 0
@@ -271,7 +282,7 @@ for _, brush in ipairs(clipBrushes) do
 		--local col = cols[(i - 1) % #cols]
 		for j, vert in ipairs(side) do
 			--mesh.Color(col[1], col[2], col[3], 255)
-			mesh.Color(r, 0, b, 255)
+			mesh.Color(r, g, b, 255)
 			mesh.Position(vert)
 			mesh.AdvanceVertex()
 
