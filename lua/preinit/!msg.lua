@@ -1,6 +1,10 @@
-if not _G.Color then include("includes/util/color.lua") end
 -- recolor Msg/N to be EPOE's color to discern as a prefix
-local COLOR_MSG = Color(255, 181, 80)
+local COLOR_MSG = { r = 255, g = 181, b = 80, a = 255 }
+
+local MsgC = MsgC
+local table_concat = table.concat
+local tostring = tostring
+local ipairs = ipairs
 
 function Msg(...)
 	local args = { ... }
@@ -9,9 +13,14 @@ function Msg(...)
 		newArgs[#newArgs + 1] = tostring(arg)
 	end
 
-	MsgC(COLOR_MSG, table.concat(newArgs, ""))
+	MsgC(COLOR_MSG, table_concat(newArgs, ""))
 end
 
 function MsgN(...)
-	Msg(..., "\n")
+	local args = { ... }
+	if #args == 0 then
+		Msg("\n")
+	else
+		Msg(..., "\n")
+	end
 end

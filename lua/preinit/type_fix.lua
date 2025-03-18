@@ -1,4 +1,5 @@
 local C_type = type
+local getmetatable = getmetatable
 function type(v)
 	local v_type = C_type(v)
 	if v_type ~= "userdata" then return v_type end
