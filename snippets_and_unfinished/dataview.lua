@@ -68,15 +68,16 @@ local function struct_unpack(format, stream, pos)
 
       local sign = 1
       local mantissa = string.byte(x, (opt == "d") and 7 or 3) % ((opt == "d") and 16 or 128)
-      for i = n - 2, 1, -1 do
-        mantissa = mantissa * (2 ^ 8) + string.byte(x, i)
+      for j = n - 2, 1, -1 do
+        mantissa = mantissa * (2 ^ 8) + string.byte(x, j)
       end
 
       if string.byte(x, n) > 127 then
         sign = -1
       end
 
-      local exponent = (string.byte(x, n) % 128) * ((opt == "d") and 16 or 2) + math.floor(string.byte(x, n - 1) / ((opt == "d") and 16 or 128))
+      local exponent = (string.byte(x, n) % 128) * ((opt == "d") and 16 or 2) +
+      math.floor(string.byte(x, n - 1) / ((opt == "d") and 16 or 128))
       if exponent == 0 then
         table.insert(vars, 0.0)
       else
@@ -108,58 +109,59 @@ local function struct_unpack(format, stream, pos)
 end
 
 local meta = {
-    data = "",
-    offset = 1,
-    Int8 = function(self)
-        local out = struct_unpack("<b", self.data, self.offset)
-        self.offset = self.offset + 1
-        return out
-    end,
-    Int16 = function(self)
-        local out = struct_unpack("<i2", self.data:sub(self.offset, self.offset + 1))
-        self.offset = self.offset + 2
-        return out
-    end,
-    Int32 = function(self)
-        local out = struct_unpack("<i4", self.data:sub(self.offset, self.offset + 3))
-        self.offset = self.offset + 4
-        return out
-    end,
-    UInt8 = function(self)
-        local out = struct_unpack("<B", self.data, self.offset)
-        self.offset = self.offset + 1
-        return out
-    end,
-    UInt16 = function(self)
-        local out = struct_unpack("<I2", self.data:sub(self.offset, self.offset + 1))
-        self.offset = self.offset + 2
-        return out
-    end,
-    UInt32 = function(self)
-        local out = struct_unpack("<I4", self.data:sub(self.offset, self.offset + 4))
-        self.offset = self.offset + 4
-        return out
-    end,
-    String = function(self, length)
-        length = tonumber(length)
-        local out = struct_unpack("<c" .. length, self.data, self.offset)
-        self.offset = self.offset + length
-        return out
-    end,
-    Seek = function(self, ofs)
-        self.offset = self.offset + ofs
-    end,
-    SeekTo = function(self, ofs)
-        self.offset = ofs + 1
-    end,
+  data = "",
+  offset = 1,
+  Int8 = function(self)
+    local out = struct_unpack("<b", self.data, self.offset)
+    self.offset = self.offset + 1
+    return out
+  end,
+  Int16 = function(self)
+    local out = struct_unpack("<i2", self.data:sub(self.offset, self.offset + 1))
+    self.offset = self.offset + 2
+    return out
+  end,
+  Int32 = function(self)
+    local out = struct_unpack("<i4", self.data:sub(self.offset, self.offset + 3))
+    self.offset = self.offset + 4
+    return out
+  end,
+  UInt8 = function(self)
+    local out = struct_unpack("<B", self.data, self.offset)
+    self.offset = self.offset + 1
+    return out
+  end,
+  UInt16 = function(self)
+    local out = struct_unpack("<I2", self.data:sub(self.offset, self.offset + 1))
+    self.offset = self.offset + 2
+    return out
+  end,
+  UInt32 = function(self)
+    local out = struct_unpack("<I4", self.data:sub(self.offset, self.offset + 4))
+    self.offset = self.offset + 4
+    return out
+  end,
+  String = function(self, length)
+    length = tonumber(length)
+    local out = struct_unpack("<c" .. length, self.data, self.offset)
+    self.offset = self.offset + length
+    return out
+  end,
+  Seek = function(self, ofs)
+    self.offset = self.offset + ofs
+  end,
+  SeekTo = function(self, ofs)
+    self.offset = ofs + 1
+  end,
 }
 meta.__index = meta
 
 local function DataView(data)
-    local tbl = setmetatable({}, meta)
-    tbl.data = data
+  local tbl = setmetatable({}, meta)
+  tbl.data = data
 
-    return tbl
+  return tbl
 end
 
 return DataView
+

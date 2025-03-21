@@ -3,22 +3,22 @@
 AddCSLuaFile()
 module("prettyprint", package.seeall)
 
-local type_colors = {
+local type_colors        = {
 	[TYPE_BOOL]     = Color(230, 138, 193),
 	[TYPE_NUMBER]   = Color(180, 164, 222),
 	[TYPE_STRING]   = Color(162, 186, 168),
-	[TYPE_FUNCTION] = Color(245,  93, 143),
+	[TYPE_FUNCTION] = Color(245, 93, 143),
 }
 
-local color_global  = Color(180, 164, 222)
+local color_global       = Color(180, 164, 222)
 
-local color_neutral = Color(222, 219, 235)
-local color_name    = Color(170, 186, 231)
+local color_neutral      = Color(222, 219, 235)
+local color_name         = Color(170, 186, 231)
 
-local color_comment = Color( 93,  93,  93)
+local color_comment      = Color(93, 93, 93)
 
 -- 'nil' value
-local NIL = {}
+local NIL                = {}
 
 -- Localise for faster access
 local pcall              = pcall
@@ -68,11 +68,11 @@ local gMsgF -- Print fragment
 local gMsgN -- Print newline
 local gMsgC -- Set print color
 
-local _MsgC = _G.MsgC
-local _MsgN = _G.MsgN
+local _MsgC              = _G.MsgC
+local _MsgN              = _G.MsgN
 
 do
-	local grep_color   = Color(235, 70, 70)
+	local grep_color = Color(235, 70, 70)
 
 	-- Grep parameters (static between gBegin/gEnd)
 	local grep
@@ -96,46 +96,43 @@ do
 
 
 	-- Actual printing
-	local function gCheckMatch( buffer )
+	local function gCheckMatch(buffer)
 		local raw = table_concat(buffer)
 
 		return raw, string_find(raw, grep, 0, grep_raw)
 	end
 
-	local function gFlushEx( raw, markers, colors, baseColor )
-
+	local function gFlushEx(raw, markers, colors, baseColor)
 		-- Print entire buffer
-		local len = string_len(raw)
+		local len       = string_len(raw)
 
 		-- Keep track of the current line properties
-		local index  = 1
-		local marker = 1
+		local index     = 1
+		local marker    = 1
 
 		local currColor = baseColor
 
 		-- Method to print to a preset area
-		local function printToIndex( limit, color )
+		local function printToIndex(limit, color)
 			local mark = markers and markers[marker]
 
 			-- Print all marker areas until we would overshoot
 			while mark and mark < limit do
-
 				-- Catch up to the marker
 				MsgC(color or currColor or color_neutral, string_sub(raw, index, mark))
-				index = mark +1
+				index     = mark + 1
 
 				-- Set new color
 				currColor = colors[marker]
 
 				-- Select next marker
-				marker = marker +1
-				mark   = markers[marker]
-
+				marker    = marker + 1
+				mark      = markers[marker]
 			end
 
 			-- Print the remaining between the last marker and the limit
 			MsgC(color or currColor or color_neutral, string_sub(raw, index, limit))
-			index = limit +1
+			index = limit + 1
 		end
 
 		-- Grep!
@@ -143,10 +140,10 @@ do
 		local from, to = string_find(raw, grep, 0, grep_raw)
 
 		while from do
-			printToIndex(from -1)
+			printToIndex(from - 1)
 			printToIndex(to, grep_color)
 
-			last     = to +1
+			last     = to + 1
 			from, to = string_find(raw, grep, last, grep_raw)
 		end
 
@@ -161,7 +158,6 @@ do
 			local raw, match = gCheckMatch(buffer)
 
 			if match then
-
 				-- Divide matches
 				if history[grep_proximity] then
 					MsgN("...")
@@ -171,48 +167,48 @@ do
 				if grep_proximity ~= 0 then
 					local len = #history
 
-					for index = len -1, 1, -1 do
+					for index = len - 1, 1, -1 do
 						local entry = history[index]
-							history[index] = nil
+						history[index] = nil
 
-						gFlushEx( entry[1], entry[2], entry[3], entry[4] )
+						gFlushEx(entry[1], entry[2], entry[3], entry[4])
 					end
 
 					history[len] = nil
 				end
 
 				-- Flush line, allow next X lines to get printed
-				gFlushEx( raw, markers, colors, baseColor )
-				remain = grep_proximity -1
+				gFlushEx(raw, markers, colors, baseColor)
+				remain = grep_proximity - 1
 
-				history[grep_proximity +1] = nil
+				history[grep_proximity + 1] = nil
 			elseif remain > 0 then
 				-- Flush immediately
-				gFlushEx( raw, markers, colors, baseColor )
-				remain = remain -1
+				gFlushEx(raw, markers, colors, baseColor)
+				remain = remain - 1
 			else
 				-- Store in history
-				table_insert(history, 1, {raw, markers, colors, baseColor})
-				history[grep_proximity +1] = nil
+				table_insert(history, 1, { raw, markers, colors, baseColor })
+				history[grep_proximity + 1] = nil
 			end
 		else
 			-- Flush anyway
-			gFlushEx( table_concat(buffer), markers, colors, baseColor )
+			gFlushEx(table_concat(buffer), markers, colors, baseColor)
 		end
 
 		-- Reset state
-		length = 0
-		buffer = {}
+		length    = 0
+		buffer    = {}
 
-		markers = nil
-		colors  = nil
+		markers   = nil
+		colors    = nil
 
 		baseColor = nil
 		currColor = nil
 	end
 
 	-- State machine
-	function gBegin( new, prox )
+	function gBegin(new, prox)
 		grep = isstring(new) and new
 
 		if grep then
@@ -220,8 +216,8 @@ do
 			grep_proximity = isnumber(prox) and prox
 
 			-- Reset everything
-			buffer  = {}
-			history = {}
+			buffer         = {}
+			history        = {}
 		end
 
 		length = 0
@@ -244,10 +240,8 @@ do
 		history = nil
 	end
 
-
-	function gMsgC( color )
+	function gMsgC(color)
 		if grep then
-
 			-- Try to save some memory by not immediately allocating colors
 			if length == 0 then
 				baseColor = color
@@ -263,17 +257,15 @@ do
 
 				-- Record color change
 				table_insert(markers, length)
-				table_insert(colors,  color)
+				table_insert(colors, color)
 			end
 		end
 
 		currColor = color
 	end
 
-	function gMsgF( str )
-
+	function gMsgF(str)
 		if grep then
-
 			-- Split multiline fragments to separate ones
 			local fragColor = currColor or baseColor
 
@@ -281,11 +273,11 @@ do
 			local from, to = string_find(str, '\n')
 
 			while from do
-				local frag = string_sub(str, last, from -1)
+				local frag = string_sub(str, last, from - 1)
 				local len  = from - last
 
 				-- Merge fragment to the line
-				length = length + len
+				length     = length + len
 				table_insert(buffer, frag)
 
 				-- Print finished line
@@ -295,15 +287,15 @@ do
 				baseColor = fragColor
 
 				-- Look for more
-				last     = to +1
-				from, to = string_find(str, '\n', last)
+				last      = to + 1
+				from, to  = string_find(str, '\n', last)
 			end
 
 			-- Push last fragment
 			local frag = string_sub(str, last)
-			local len  = string_len(str) - last +1
+			local len  = string_len(str) - last + 1
 
-			length = length + len
+			length     = length + len
 			table_insert(buffer, frag)
 		else
 			-- Push immediately
@@ -324,14 +316,17 @@ do
 	end
 end
 
--- stolen from gcompute
+-- taken from gcompute
 local escapeTable = {}
 local multilineEscapeTable = {}
 for i = 0, 255 do
 	local c = string_char(i)
 
-	if i < string_byte(" ") then escapeTable[c] = string_format("\\x%02x", i)
-	elseif i >= 127 then escapeTable[c] = string_format("\\x%02x", i) end
+	if i < string_byte(" ") then
+		escapeTable[c] = string_format("\\x%02x", i)
+	elseif i >= 127 then
+		escapeTable[c] = string_format("\\x%02x", i)
+	end
 end
 escapeTable["\\"] = "\\"
 escapeTable["\t"] = "\\t"
@@ -356,6 +351,7 @@ local limitedprint = false
 function StartLimit()
 	limitedprint = true
 end
+
 function EndLimit()
 	limitedprint = false
 end
@@ -377,6 +373,7 @@ local printtable = false
 function StartPrintTable()
 	printtable = true
 end
+
 function EndPrintTable()
 	printtable = false
 end
@@ -429,16 +426,22 @@ local function UTF8_Iterator(str, offset)
 	offset = offset or 1
 	if offset <= 0 then offset = 1 end
 
-	return function ()
+	return function()
 		if offset > #str then return nil, #str + 1 end
 
 		local length
 		local byte = string_byte(str, offset)
-		if not byte then length = 0
-		elseif byte >= 240 then length = 4
-		elseif byte >= 224 then length = 3
-		elseif byte >= 192 then length = 2
-		else length = 1 end
+		if not byte then
+			length = 0
+		elseif byte >= 240 then
+			length = 4
+		elseif byte >= 224 then
+			length = 3
+		elseif byte >= 192 then
+			length = 2
+		else
+			length = 1
+		end
 
 		local character = string_sub(str, offset, offset + length - 1)
 		local lastOffset = offset
@@ -487,7 +490,7 @@ local function UTF8_Byte(char, offset)
 	return byte, length
 end
 
-local function InternalPrintValue( value, shouldComment, shouldComma )
+local function InternalPrintValue(value, shouldComment, shouldComma)
 	if shouldComment == nil then
 		shouldComment = true
 	end
@@ -507,7 +510,7 @@ local function InternalPrintValue( value, shouldComment, shouldComma )
 		return table_concat(strOut, "")
 	end
 
-	local color = type_colors[ TypeID(value) ]
+	local color = type_colors[TypeID(value)]
 
 	-- For strings, place quotes
 	if isstring(value) then
@@ -531,7 +534,7 @@ local function InternalPrintValue( value, shouldComment, shouldComma )
 	if istable(value) and not IsColor(value) then
 		local classname = "table"
 		local mt = getmetatable(value)
-	
+
 		if mt then
 			if mt.MetaName then
 				classname = mt.MetaName
@@ -825,7 +828,8 @@ local function InternalPrintValue( value, shouldComment, shouldComma )
 
 				if #value:GetChildren() > 0 then
 					gMsgF(string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()))
-					strOut[#strOut + 1] = string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren())
+					strOut[#strOut + 1] = string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""),
+						#value:GetChildren())
 				end
 			end
 
@@ -927,8 +931,12 @@ local function InternalPrintValue( value, shouldComment, shouldComma )
 
 		if shouldComment and IsValid(value) then
 			gMsgC(color_comment)
-			gMsgF(string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible", #value:GetChildren() > 0 and string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or ""))
-			strOut[#strOut + 1] = string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible", #value:GetChildren() > 0 and string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or "")
+			gMsgF(string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible",
+				#value:GetChildren() > 0 and
+				string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or ""))
+			strOut[#strOut + 1] = string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible",
+				#value:GetChildren() > 0 and
+				string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or "")
 		end
 		return table_concat(strOut, "")
 	end
@@ -960,22 +968,21 @@ end
 -- Associated to object keys
 local objID
 
-local function isprimitive( value )
+local function isprimitive(value)
 	local id = TypeID(value)
 
 	return id <= TYPE_FUNCTION and id ~= TYPE_TABLE
 end
 
-local function InternalPrintTable( table, path, prefix, names, todo, recursive )
-
+local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 	-- Collect keys and some info about them
-	local keyList  = {}
-	local keyStr   = {}
+	local keyList        = {}
+	local keyStr         = {}
 	local shouldPrintKey = {}
 
-	local keyCount = 0
+	local keyCount       = 0
 
-	for key, value in pairs( table ) do
+	for key, value in pairs(table) do
 		-- Add to key list for later sorting
 		table_insert(keyList, key)
 
@@ -1020,14 +1027,15 @@ local function InternalPrintTable( table, path, prefix, names, todo, recursive )
 	local keyLen = -1
 
 	for key, str in pairs(keyStr) do
-		str = IsValidVariableName(str) and str or "[" .. (shouldPrintKey[key] and str or (isnumber(tonumber(str)) and str or string_format("%q", str))) .. "]"
+		str = IsValidVariableName(str) and str or
+		"[" .. (shouldPrintKey[key] and str or (isnumber(tonumber(str)) and str or string_format("%q", str))) .. "]"
 
 		keyLen = math_max(keyLen, string_len(str))
 	end
 
 	-- Sort table keys
 	if keyCount > 1 then
-		table_sort( keyList, function( A, B )
+		table_sort(keyList, function(A, B)
 			-- Sort numbers numerically correct
 			if isnumber(A) and isnumber(B) then
 				return A < B
@@ -1035,8 +1043,7 @@ local function InternalPrintTable( table, path, prefix, names, todo, recursive )
 
 			-- Order by string representation
 			return string_lower(keyStr[A]) < string_lower(keyStr[B])
-
-		end )
+		end)
 	end
 
 	-- Mark object as done
@@ -1169,19 +1176,19 @@ local function InternalPrintTable( table, path, prefix, names, todo, recursive )
 	end
 end
 
-function PrintTableGrep( table, grep, proximity )
+function PrintTableGrep(table, grep, proximity)
 	local base = {
 		[_G]    = "_G",
 		[table] = "root"
 	}
 
 	gBegin(grep, proximity)
-		objID = 0
-		InternalPrintTable(table, nil, "", base, {})
+	objID = 0
+	InternalPrintTable(table, nil, "", base, {})
 	gFinish()
 end
 
-function PrintLocals( level )
+function PrintLocals(level)
 	local level = level or 2
 	local hash  = {}
 
@@ -1199,12 +1206,12 @@ function PrintLocals( level )
 		hash[name] = value
 	end
 
-	PrintTableGrep( hash )
+	PrintTableGrep(hash)
 end
 
 function show(...)
 	local n = select('#', ...)
-	local tbl = {...}
+	local tbl = { ... }
 
 
 	for i = 1, n do
@@ -1246,7 +1253,7 @@ function show(...)
 						gMsgN()
 					end
 				end
-				
+
 				PrintTableGrep(value)
 			end
 		elseif isentity(value) then
@@ -1320,7 +1327,7 @@ function show(...)
 				end
 			end
 		elseif isfunction(value) then
-			if GLib and syntaxParser then
+			if GLib and GLib.Lua and syntaxParser then
 				local f = GLib.Lua.Function(value)
 				if f:IsNative() then
 					InternalPrintValue(value, true, false)
@@ -1337,7 +1344,7 @@ function show(...)
 						local startLine = f:GetStartLine()
 						local endLine   = f:GetEndLine()
 
-						local lines = string_split(data, "\n")
+						local lines     = string_split(data, "\n")
 						if endLine <= #lines then
 							local codeLines = {}
 							for l = startLine, endLine do
@@ -1351,7 +1358,7 @@ function show(...)
 						local ok, out = pcall(function() return GLib.Lua.BytecodeReader(value):ToString() end)
 						if not ok then
 							gMsgC(color_comment)
-							gMsgF(string_format("-- Failed to decompile: %s",out))
+							gMsgF(string_format("-- Failed to decompile: %s", out))
 							gMsgN()
 							code = ""
 						else
@@ -1388,7 +1395,7 @@ function show(...)
 			if GLib and ContainsSequences(value) then
 				local codePointCount = UTF8_Length(value)
 				gMsgC(color_comment)
-				gMsgF("-- " .. tostring (codePointCount) .. " code point" .. (codePointCount == 1 and "" or "s"))
+				gMsgF("-- " .. tostring(codePointCount) .. " code point" .. (codePointCount == 1 and "" or "s"))
 				gMsgN()
 
 				local j = 0
@@ -1402,7 +1409,9 @@ function show(...)
 					j = j + 1
 
 					gMsgC(color_comment)
-					gMsgF("-- " .. string_format("U+%06X ", UTF8_Byte(c)) .. (not characterPrintingBlacklist[c] and c or " ") .. " " .. GLib.Unicode.GetCharacterName(c))
+					gMsgF("-- " ..
+					string_format("U+%06X ", UTF8_Byte(c)) ..
+					(not characterPrintingBlacklist[c] and c or " ") .. " " .. GLib.Unicode.GetCharacterName(c))
 					gMsgN()
 				end
 			end
