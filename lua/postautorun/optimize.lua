@@ -81,7 +81,7 @@ do -- optimized animation stuff
 
 					ply:SetPoseParameter("vertical_velocity", (dp < 0 and dp or 0) + vec_Dot(fwd, veh_vel) * 0.005)
 
-					local steer = ENTITY.GetPoseParameter(veh, "vehicle_steer")
+					local steer = veh:GetPoseParameter("vehicle_steer")
 					steer = steer * 2 - 1
 					if veh:GetClass() == "prop_vehicle_prisoner_pod" then
 						steer = 0
