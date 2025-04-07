@@ -47,8 +47,14 @@ local skip_textures = {
 local MAP = NikNaks.Map("gm_construct")
 
 local MAX_TRIANGLES = 10922
+
 local OFFSET = Vector(-384, 128, 1024)
 local SCALE_FACTOR = 16
+
+--[[if InfMap then
+	SCALE_FACTOR = 1
+	OFFSET = false
+end--]]
 
 local function generate_map_meshes()
 	local function do_face(pos, vert, vmid)
@@ -91,6 +97,7 @@ local function generate_map_meshes()
 
 	for texture, verts in next, texture_verts do
 		local imeshes = {}
+		print("BUILD", texture)
 		local imesh = Mesh()
 		mesh.Begin(imesh, MATERIAL_TRIANGLES, MAX_TRIANGLES)
 		for _, face_vertices in ipairs(verts) do
@@ -104,13 +111,23 @@ local function generate_map_meshes()
 					local pos2 = v2.pos * 1
 					local pos3 = v3.pos * 1
 
-					pos1:Div(SCALE_FACTOR)
-					pos2:Div(SCALE_FACTOR)
-					pos3:Div(SCALE_FACTOR)
+					if SCALE_FACTOR > 1 then
+						pos1:Div(SCALE_FACTOR)
+						pos2:Div(SCALE_FACTOR)
+						pos3:Div(SCALE_FACTOR)
+					end
 
-					pos1:Add(OFFSET)
-					pos2:Add(OFFSET)
-					pos3:Add(OFFSET)
+					--[[if InfMap then
+						pos1:Set(InfMap.unlocalize_vector(pos1, OFFSET))
+						pos2:Set(InfMap.unlocalize_vector(pos2, OFFSET))
+						pos3:Set(InfMap.unlocalize_vector(pos3, OFFSET))
+					else--]]
+					if OFFSET then
+						pos1:Add(OFFSET)
+						pos2:Add(OFFSET)
+						pos3:Add(OFFSET)
+					end
+					--end
 
 					local vmid = (pos1 + pos2 + pos3) / 3
 
@@ -123,8 +140,10 @@ local function generate_map_meshes()
 			end
 
 			if mesh.VertexCount() >= MAX_TRIANGLES then
+				print("BUILD (overflow)", texture)
 				mesh.End()
 				table.insert(imeshes, imesh)
+				print("IsValid", texture, imesh:IsValid())
 
 				imesh = Mesh()
 				mesh.Begin(imesh, MATERIAL_TRIANGLES, MAX_TRIANGLES)
@@ -132,6 +151,7 @@ local function generate_map_meshes()
 		end
 		mesh.End()
 		table.insert(imeshes, imesh)
+		print("IsValid", texture, imesh:IsValid())
 
 		mim_meshes[texture] = imeshes
 	end

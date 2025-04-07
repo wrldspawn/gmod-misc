@@ -10,7 +10,7 @@ if CLIENT then
 		net.SendToServer()
 	end
 
-	local commands = {"sv","sh","clients","self","both","cl","file"}
+	local commands = { "sv", "sh", "clients", "self", "both", "cl", "file" }
 	for _, cmd in ipairs(commands) do
 		concommand.Add("pprint_" .. cmd, function() end)
 	end
@@ -282,7 +282,7 @@ ply = ply
 })
 end)--]]
 
-local sv_allowcslua = GetConVar"sv_allowcslua"
+local sv_allowcslua = GetConVar "sv_allowcslua"
 
 add("self", function(ply, line)
 	if not line then return end

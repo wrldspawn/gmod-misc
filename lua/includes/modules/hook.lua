@@ -14,6 +14,7 @@ local print = print
 local GProtectedCall = ProtectedCall
 local tostring = tostring
 local error = error
+local rawset = rawset
 
 local gmod_GetGamemode = gmod.GetGamemode
 local math_floor = math.floor
@@ -165,8 +166,20 @@ local function new_event(name)
 	return events[name]
 end
 
+local hook_table = {}
+local function hook_table_meta(event_name, hooks)
+	return setmetatable(hooks, {
+		__newindex = function(self, key, value)
+			if value == nil then
+				hook.Remove(event_name, key)
+			elseif isfunction(value) then
+				hook.Add(event_name, key, value)
+			end
+		end
+	})
+end
+
 function GetTable()
-	local new_table = {}
 	for event_name, event in next, events do
 		local hooks = {}
 		for i = 1, 3 do
@@ -176,9 +189,10 @@ function GetTable()
 				hooks[node.name] = event[node.name].real_func
 			end
 		end
-		new_table[event_name] = hooks
+
+		hook_table[event_name] = hook_table_meta(event_name, hooks)
 	end
-	return new_table
+	return hook_table
 end
 
 function Remove(event_name, name)
@@ -196,16 +210,19 @@ function Remove(event_name, name)
 	local event = events[event_name]
 	if not event then return end -- no event with that name
 
-	local hook_table = event[name]
-	if not hook_table then return end -- no hook with that name
+	local tbl = event[name]
+	if not tbl then return end -- no hook with that name
 
-	hook_table.node.removed = true
+	tbl.node.removed = true
 
 	-- we need to overwrite the priority list with the new one, to make sure we don't mess up with ongoing iterations inside hook.Call/ProtectedCall
 	-- we basically copy the list without the removed hook
-	CopyPriorityList(event[ 0 --[[lists]] ], hook_table.priority)
+	CopyPriorityList(event[ 0 --[[lists]] ], tbl.priority)
 
 	event[name] = nil -- remove the hook from the event table
+	if hook_table[event_name] then
+		rawset(hook_table[event_name], name, nil)
+	end
 end
 
 function Add(event_name, name, func, priority)
@@ -302,6 +319,11 @@ function Add(event_name, name, func, priority)
 		real_func = real_func,
 		node = node,
 	}
+
+	if not hook_table[event_name] then
+		hook_table[event_name] = hook_table_meta(event_name, {})
+	end
+	rawset(hook_table[event_name], name, real_func)
 
 	if NORMAL_PRIORITIES_ORDER[priority] then
 		table_sort(hook_list, function(a, b)

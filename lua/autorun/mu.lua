@@ -229,6 +229,14 @@ function tblop:first()
 	end
 end
 
+function tblop:last()
+	local out
+	for _, v in next, self do
+		out = v
+	end
+	return out
+end
+
 function tblop:errors()
 	return getmetatable(self).errors or {}
 end
@@ -302,7 +310,7 @@ mu.e = setmetatable({}, EMETA)
 _G.mu = setmetatable({}, META)
 
 local function strsim(str1, str2)
-    if str1:Trim() == "" or str2:Trim() == "" then return false end
+	if str1:Trim() == "" or str2:Trim() == "" then return false end
 	if str1 == str2 or string.find(str1, str2) or string.find(str2, str1) then
 		return true
 	end
@@ -310,73 +318,75 @@ local function strsim(str1, str2)
 	return false
 end
 local function find_ent(inp)
-    -- search "_0000" as ent index
-		local iStart, iEnd = string.find(inp, "^_%d+")
-		if iStart then
-			local iEntIndex = tonumber(string.sub(inp, iStart + 1, iEnd))
-			local ent = Entity(iEntIndex)
+	-- search "_0000" as ent index
+	local iStart, iEnd = string.find(inp, "^_%d+")
+	if iStart then
+		local iEntIndex = tonumber(string.sub(inp, iStart + 1, iEnd))
+		local ent = Entity(iEntIndex)
 
-			if ent:IsValid() then return ent end
+		if ent:IsValid() then return ent end
+	end
+
+	-- search player names
+	for _, ply in player.Iterator() do
+		if strsim(inp:lower(), ply:Nick():lower()) then
+			return ply
+		end
+	end
+
+	-- search entities
+	for _, ent in ents.Iterator() do
+		if strsim(inp, ent:GetClass():lower()) then
+			return ent
 		end
 
-		-- search player names
-			for _, ply in player.Iterator() do
-				if strsim(inp:lower(), ply:Nick():lower()) then
-					return ply
-				end
-			end
-
-		-- search entities
-			for _, ent in ents.Iterator() do
-				if strsim(inp, ent:GetClass():lower()) then
-					return ent
-				end
-
-				if ent.GetName and IsSimilar(inp, ent:GetName()) then
-					return ent
-				end
-			end
-	    return NULL
+		if ent.GetName and IsSimilar(inp, ent:GetName()) then
+			return ent
+		end
+	end
+	return NULL
 end
 
 local function mu_env(p)
-    local mu = _G.mu
-    if CLIENT and not p then p = LocalPlayer() end
-    if not (IsValid(p) and isentity(p) and p:IsPlayer()) then return end
+	local mu = _G.mu
+	if CLIENT and not p then p = LocalPlayer() end
+	if not (IsValid(p) and isentity(p) and p:IsPlayer()) then return end
 
-    local tr = p:GetEyeTrace()
+	local tr = p:GetEyeTrace()
 
-    local tbl = {
-			me = p,
-			wep = p:GetActiveWeapon(),
-			trace = tr, tr = tr,
-			this = tr.Entity,
-			model = tr.Entity:IsValid() and tr.Entity:GetModel() or "",
-			there = tr.HitPos,
-			here = p:GetPos(),
-			those = mu(ents.FindInSphere(tr.HitPos, 512)),
-			hooks = hook.GetTable(),
-			us = mu(ents.FindInSphere(p:GetPos(), 256)):filter("e->e:IsPlayer()"),
-			all = mu.p(),
-            allof = mu.e.c,
-		}
-    if SERVER then
-        tbl.these = mu(constraint.GetAllConstrainedEntities(tr.Entity))
-    end
+	local tbl = {
+		me = p,
+		wep = p:GetActiveWeapon(),
+		trace = tr,
+		tr = tr,
+		this = tr.Entity,
+		model = tr.Entity:IsValid() and tr.Entity:GetModel() or "",
+		there = tr.HitPos,
+		here = p:GetPos(),
+		those = mu(ents.FindInSphere(tr.HitPos, 512)),
+		hooks = hook.GetTable(),
+		us = mu(ents.FindInSphere(p:GetPos(), 256)):filter("e->e:IsPlayer()"),
+		all = mu.p(),
+		allof = mu.e.c,
+	}
+	if SERVER then
+		tbl.these = mu(constraint.GetAllConstrainedEntities(tr.Entity))
+	end
 
-		local env = setmetatable(tbl,{
-			__index = function(t, k)
-				if _G[k] ~= nil then return _G[k] end
+	local env = setmetatable(tbl, {
+		__index = function(t, k)
+			if _G[k] ~= nil then return _G[k] end
 
-				local ent = find_ent(k)
-				if ent ~= NULL then return ent end
+			local ent = find_ent(k)
+			if ent ~= NULL then return ent end
 
-				return nil
-			end,
-			__newindex = _G
-		})
+			return nil
+		end,
+		__newindex = _G
+	})
 
-		return env
+	return env
 end
 
 _G._mu_env = mu_env
+

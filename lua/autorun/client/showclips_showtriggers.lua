@@ -1,4 +1,5 @@
-if not NikNaks then require("niknaks") end
+if not NikNaks then pcall(require, "niknaks") end
+if not NikNaks then return end
 
 -- hack for triggers cause i dont feel like making a pr
 local function getupvalues(f)
@@ -96,112 +97,119 @@ local function VerticiesFromPlanes(planes)
 end
 -- }}}
 
-local brushes = {}
-for _, brush in ipairs(NikNaks.CurrentMap:GetBrushes()) do
-	local invis = true
-	for i = 1, brush.numsides do
-		local tex = brush:GetTexture(i)
-		if tex:lower() ~= "tools/toolsinvisible" then
-			invis = false
-			break
+local function collectClipBrushes()
+	local brushes = {}
+	for _, brush in ipairs(NikNaks.CurrentMap:GetBrushes()) do
+		local invis = true
+		for i = 1, brush.numsides do
+			local tex = brush:GetTexture(i)
+			if tex:lower() ~= "tools/toolsinvisible" then
+				invis = false
+				break
+			end
 		end
+
+		if invis == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
+
+		brushes[#brushes + 1] = brush
 	end
 
-	if invis == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
+	-- this implementation is not perfect but it at least works
+	-- (theres a weird ring on surf_adrift_fix)
+	local clipBrushes = {}
+	for _, brush in ipairs(brushes) do
+		local planes = {}
+		for _, side in ipairs(brush.sides) do
+			planes[#planes + 1] = side.plane
+		end
 
-	brushes[#brushes + 1] = brush
+		local verts = VerticiesFromPlanes(planes)
+
+		local brush_verts = {}
+		for _, side in ipairs(brush.sides) do
+			local plane = side.plane
+			local norm = plane.normal
+
+			local points = {}
+
+			for _, vert in ipairs(verts) do
+				local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
+				if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
+
+				points[#points + 1] = vert
+			end
+
+			-- sort them in clockwise order
+			local c = points[1]
+			table.sort(points, function(a, b)
+				local dot = norm:Dot((c - a):Cross(b - c))
+				return dot > 0.001
+			end)
+
+			local sidePoints = {}
+			for i = 1, #points - 2 do
+				sidePoints[#sidePoints + 1] = points[1] + norm * 0
+				sidePoints[#sidePoints + 1] = points[i + 1] + norm * 0
+				sidePoints[#sidePoints + 1] = points[i + 2] + norm * 0
+			end
+
+			-- somehow ended up with empty sides
+			if #sidePoints > 0 then
+				brush_verts[#brush_verts + 1] = sidePoints
+				sidePoints.norm = norm
+			end
+		end
+		brush_verts.contents = brush:GetContents()
+
+		clipBrushes[#clipBrushes + 1] = brush_verts
+	end
+
+	return clipBrushes
 end
 
--- this implementation is not perfect but it at least works
--- (theres a weird ring on surf_adrift_fix)
-local clipBrushes = {}
-for _, brush in ipairs(brushes) do
-	local planes = {}
-	for _, side in ipairs(brush.sides) do
-		planes[#planes + 1] = side.plane
-	end
+local function collectTriggerBrushes()
+	local triggerBrushes = {}
+	local bmodels = NikNaks.CurrentMap:GetBModels()
+	for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("^trigger_*")) do
+		if not trigger.model then
+			print("wtf")
+			PrintTable(trigger)
+			continue
+		end
+		local model = tonumber(trigger.model:sub(2))
+		if not model then
+			print("wtf", trigger.model)
+			continue
+		end
+		local bmodel = bmodels[model]
 
-	local verts = VerticiesFromPlanes(planes)
+		if not bmodel then continue end
 
-	local brush_verts = {}
-	for _, side in ipairs(brush.sides) do
-		local plane = side.plane
-		local norm = plane.normal
+		local faces = bmodels[model]:GetFaces()
 
-		local points = {}
+		local brush_verts = {}
 
-		for _, vert in ipairs(verts) do
-			local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
-			if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
-
-			points[#points + 1] = vert
+		for _, face in ipairs(faces) do
+			local verts = face:GenerateVertexTriangleData()
+			local side = {}
+			for _, vert in ipairs(verts) do
+				side[#side + 1] = vert.pos
+			end
+			brush_verts[#brush_verts + 1] = side
 		end
 
-		-- sort them in clockwise order
-		local c = points[1]
-		table.sort(points, function(a, b)
-			local dot = norm:Dot((c - a):Cross(b - c))
-			return dot > 0.001
-		end)
+		--local origin = trigger.origin
 
-		local sidePoints = {}
-		for i = 1, #points - 2 do
-			sidePoints[#sidePoints + 1] = points[1] + norm * 0
-			sidePoints[#sidePoints + 1] = points[i + 1] + norm * 0
-			sidePoints[#sidePoints + 1] = points[i + 2] + norm * 0
-		end
+		brush_verts.classname = trigger.classname
+		brush_verts.outputs = {
+			OnStartTouch = trigger.OnStartTouch,
+			OnEndTouch = trigger.OnEndTouch,
+		}
 
-		-- somehow ended up with empty sides
-		if #sidePoints > 0 then
-			brush_verts[#brush_verts + 1] = sidePoints
-			sidePoints.norm = norm
-		end
-	end
-	brush_verts.contents = brush:GetContents()
-
-	clipBrushes[#clipBrushes + 1] = brush_verts
-end
-
--- triggers
-local triggerBrushes = {}
-local bmodels = NikNaks.CurrentMap:GetBModels()
-for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("^trigger_*")) do
-	if not trigger.model then
-		print("wtf")
-		PrintTable(trigger)
-		continue
-	end
-	local model = tonumber(trigger.model:sub(2))
-	if not model then
-		print("wtf", trigger.model)
-		continue
-	end
-	local bmodel = bmodels[model]
-
-	if not bmodel then continue end
-
-	local faces = bmodels[model]:GetFaces()
-
-	local brush_verts = {}
-
-	for _, face in ipairs(faces) do
-		local verts = face:GenerateVertexTriangleData()
-		local side = {}
-		for _, vert in ipairs(verts) do
-			side[#side + 1] = vert.pos
-		end
-		brush_verts[#brush_verts + 1] = side
+		triggerBrushes[#triggerBrushes + 1] = brush_verts
 	end
 
-	--local origin = trigger.origin
-
-	brush_verts.classname = trigger.classname
-	brush_verts.outputs = {
-		OnStartTouch = trigger.OnStartTouch,
-		OnEndTouch = trigger.OnEndTouch,
-	}
-
-	triggerBrushes[#triggerBrushes + 1] = brush_verts
+	return triggerBrushes
 end
 
 -- hotreload
@@ -213,90 +221,93 @@ end
 
 table.Empty(showclips_clipMeshes)
 
+local function generateClipMeshes()
+	local clipBrushes = collectClipBrushes()
 
--- draw translucent triangles for every face
-for _, brush in ipairs(clipBrushes) do
-	local obj = Mesh()
-	local contents = brush.contents
-	local r = 255
-	local g = 0
-	local b = 255
-	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
-		r = 128
-	end
-	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
-		b = 0
-	end
-	if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
-		g = 255
-	end
-
-	local vertCount = 0
-	for _, side in ipairs(brush) do
-		vertCount = vertCount + #side
-	end
-
-	mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
-	for _, side in ipairs(brush) do
-		for _, vert in ipairs(side) do
-			mesh.Color(r, g, b, 32)
-			mesh.Position(vert)
-			mesh.AdvanceVertex()
+	-- translucent triangles for every face
+	for _, brush in ipairs(clipBrushes) do
+		local obj = Mesh()
+		local contents = brush.contents
+		local r = 255
+		local g = 0
+		local b = 255
+		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
+			r = 128
 		end
-	end
-	mesh.End()
-
-	showclips_clipMeshes[#showclips_clipMeshes + 1] = obj
-end
-
--- outline
-for _, brush in ipairs(clipBrushes) do
-	local obj = Mesh()
-	local contents = brush.contents
-	local r = 255
-	local g = 0
-	local b = 255
-	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
-		r = 128
-	end
-	if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
-		b = 0
-	end
-	if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
-		g = 255
-	end
-
-	local vertCount = 0
-	local newBrush = {}
-
-	for _, side in ipairs(brush) do
-		newBrush[#newBrush + 1] = dedupe(side)
-	end
-
-	for _, side in ipairs(newBrush) do
-		vertCount = vertCount + #side
-	end
-
-	mesh.Begin(obj, MATERIAL_LINES, vertCount)
-	for i, side in ipairs(newBrush) do
-		--local col = cols[(i - 1) % #cols]
-		for j, vert in ipairs(side) do
-			--mesh.Color(col[1], col[2], col[3], 255)
-			mesh.Color(r, g, b, 255)
-			mesh.Position(vert)
-			mesh.AdvanceVertex()
-
-			-- spent hours doing complicated math and then upon giving up i went "what does valve do?"
-			-- this.
-			local nextVert = side[j + 1 % #side]
-			if not nextVert then nextVert = side[1] end
-			mesh.Position(nextVert)
-			mesh.AdvanceVertex()
+		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
+			b = 0
 		end
-	end
-	mesh.End()
+		if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
+			g = 255
+		end
 
-	showclips_clipMeshes[#showclips_clipMeshes + 1] = obj
+		local vertCount = 0
+		for _, side in ipairs(brush) do
+			vertCount = vertCount + #side
+		end
+
+		mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
+		for _, side in ipairs(brush) do
+			for _, vert in ipairs(side) do
+				mesh.Color(r, g, b, 32)
+				mesh.Position(vert)
+				mesh.AdvanceVertex()
+			end
+		end
+		mesh.End()
+
+		showclips_clipMeshes[#showclips_clipMeshes + 1] = obj
+	end
+
+	-- outline
+	for _, brush in ipairs(clipBrushes) do
+		local obj = Mesh()
+		local contents = brush.contents
+		local r = 255
+		local g = 0
+		local b = 255
+		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
+			r = 128
+		end
+		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
+			b = 0
+		end
+		if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
+			g = 255
+		end
+
+		local vertCount = 0
+		local newBrush = {}
+
+		for _, side in ipairs(brush) do
+			newBrush[#newBrush + 1] = dedupe(side)
+		end
+
+		for _, side in ipairs(newBrush) do
+			vertCount = vertCount + #side
+		end
+
+		mesh.Begin(obj, MATERIAL_LINES, vertCount)
+		for i, side in ipairs(newBrush) do
+			--local col = cols[(i - 1) % #cols]
+			for j, vert in ipairs(side) do
+				--mesh.Color(col[1], col[2], col[3], 255)
+				mesh.Color(r, g, b, 255)
+				mesh.Position(vert)
+				mesh.AdvanceVertex()
+
+				-- spent hours doing complicated math and then upon giving up i went "what does valve do?"
+				-- this.
+				local nextVert = side[j + 1 % #side]
+				if not nextVert then nextVert = side[1] end
+				mesh.Position(nextVert)
+				mesh.AdvanceVertex()
+			end
+		end
+		mesh.End()
+
+		showclips_clipMeshes[#showclips_clipMeshes + 1] = obj
+	end
 end
 
 -- triggers
@@ -374,62 +385,66 @@ local function classify_trigger(brush)
 	return TRIGGER_COLORS[type]
 end
 
-for _, brush in ipairs(triggerBrushes) do
-	local obj = Mesh()
+local function generateTriggerMeshes()
+	local triggerBrushes = collectTriggerBrushes()
 
-	local col = classify_trigger(brush)
+	for _, brush in ipairs(triggerBrushes) do
+		local obj = Mesh()
 
-	local vertCount = 0
-	for _, side in ipairs(brush) do
-		vertCount = vertCount + #side
-	end
+		local col = classify_trigger(brush)
 
-	mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
-	for _, side in ipairs(brush) do
-		for _, vert in ipairs(side) do
-			mesh.Color(col.r, col.g, col.b, 32)
-			mesh.Position(vert)
-			mesh.AdvanceVertex()
+		local vertCount = 0
+		for _, side in ipairs(brush) do
+			vertCount = vertCount + #side
 		end
-	end
-	mesh.End()
 
-	showtriggers_triggerMeshes[#showtriggers_triggerMeshes + 1] = obj
-end
-
--- outline
-for _, brush in ipairs(triggerBrushes) do
-	local obj = Mesh()
-
-	local col = classify_trigger(brush)
-
-	local vertCount = 0
-	local newBrush = {}
-
-	for _, side in ipairs(brush) do
-		newBrush[#newBrush + 1] = dedupe(side)
-	end
-
-	for _, side in ipairs(newBrush) do
-		vertCount = vertCount + #side
-	end
-
-	mesh.Begin(obj, MATERIAL_LINES, vertCount)
-	for i, side in ipairs(newBrush) do
-		for j, vert in ipairs(side) do
-			mesh.Color(col.r, col.g, col.b, 255)
-			mesh.Position(vert)
-			mesh.AdvanceVertex()
-
-			local nextVert = side[j + 1 % #side]
-			if not nextVert then nextVert = side[1] end
-			mesh.Position(nextVert)
-			mesh.AdvanceVertex()
+		mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
+		for _, side in ipairs(brush) do
+			for _, vert in ipairs(side) do
+				mesh.Color(col.r, col.g, col.b, 32)
+				mesh.Position(vert)
+				mesh.AdvanceVertex()
+			end
 		end
-	end
-	mesh.End()
+		mesh.End()
 
-	showtriggers_triggerMeshes[#showtriggers_triggerMeshes + 1] = obj
+		showtriggers_triggerMeshes[#showtriggers_triggerMeshes + 1] = obj
+	end
+
+	-- outline
+	for _, brush in ipairs(triggerBrushes) do
+		local obj = Mesh()
+
+		local col = classify_trigger(brush)
+
+		local vertCount = 0
+		local newBrush = {}
+
+		for _, side in ipairs(brush) do
+			newBrush[#newBrush + 1] = dedupe(side)
+		end
+
+		for _, side in ipairs(newBrush) do
+			vertCount = vertCount + #side
+		end
+
+		mesh.Begin(obj, MATERIAL_LINES, vertCount)
+		for i, side in ipairs(newBrush) do
+			for j, vert in ipairs(side) do
+				mesh.Color(col.r, col.g, col.b, 255)
+				mesh.Position(vert)
+				mesh.AdvanceVertex()
+
+				local nextVert = side[j + 1 % #side]
+				if not nextVert then nextVert = side[1] end
+				mesh.Position(nextVert)
+				mesh.AdvanceVertex()
+			end
+		end
+		mesh.End()
+
+		showtriggers_triggerMeshes[#showtriggers_triggerMeshes + 1] = obj
+	end
 end
 
 local showclips = false
@@ -445,6 +460,11 @@ local clip_commands = {
 }
 
 local function toggleclips()
+	if #showclips_clipMeshes == 0 then
+		LocalPlayer():ChatPrint("Generating clip brush meshes, please wait...")
+		generateClipMeshes()
+	end
+
 	if showclips then
 		showclips = false
 		LocalPlayer():ChatPrint("No longer showing clip brushes.")
@@ -465,6 +485,11 @@ local trigger_commands = {
 }
 
 local function toggletriggers()
+	if #showtriggers_triggerMeshes == 0 then
+		LocalPlayer():ChatPrint("Generating trigger meshes, please wait...")
+		generateTriggerMeshes()
+	end
+
 	if showtriggers then
 		showtriggers = false
 		LocalPlayer():ChatPrint("No longer showing triggers.")
