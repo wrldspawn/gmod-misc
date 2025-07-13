@@ -132,6 +132,7 @@ end)
 concommand.Add("mapicon", function()
 	if inProcess then return end
 
+	startCapture = true
 	timer.Simple(0.5, function()
 		takeCapture = true
 	end)
