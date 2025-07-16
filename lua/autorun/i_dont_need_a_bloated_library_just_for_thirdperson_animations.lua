@@ -8,6 +8,14 @@ if SERVER then
 	util.AddNetworkString(GESTURE_TAG)
 end
 
+-- so much for "legacy and likely removed in an update"
+function CTFK(tab, value)
+	for _, v in ipairs(tab) do
+		if v == value then return true end
+	end
+	return false
+end
+
 function DRC:CallGesture(ply, slot, act, akill, fallback)
 	if not SERVER then return end
 	if not act then return end
