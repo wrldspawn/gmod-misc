@@ -171,9 +171,9 @@ local function hook_table_meta(event_name, hooks)
 	return setmetatable(hooks, {
 		__newindex = function(self, key, value)
 			if value == nil then
-				hook.Remove(event_name, key)
+				_M.Remove(event_name, key)
 			elseif isfunction(value) then
-				hook.Add(event_name, key, value)
+				_M.Add(event_name, key, value)
 			end
 		end
 	})

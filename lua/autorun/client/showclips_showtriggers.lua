@@ -21,6 +21,8 @@ local _tableTypes = getupvalues(ParseEntity)._tableTypes
 _tableTypes.OnEndTouch = true
 NikNaks.CurrentMap._entities = nil
 
+local MAP = NikNaks.CurrentMap
+
 local function dedupe(verts)
 	local dedupedVerts = {}
 	for _, v1 in ipairs(verts) do
@@ -99,7 +101,7 @@ end
 
 local function collectClipBrushes()
 	local brushes = {}
-	for _, brush in ipairs(NikNaks.CurrentMap:GetBrushes()) do
+	for _, brush in ipairs(MAP:GetBrushes()) do
 		local invis = true
 		for i = 1, brush.numsides do
 			local tex = brush:GetTexture(i)
@@ -167,18 +169,20 @@ local function collectClipBrushes()
 	return clipBrushes
 end
 
+local trigger_info = {}
+
 local function collectTriggerBrushes()
 	local triggerBrushes = {}
-	local bmodels = NikNaks.CurrentMap:GetBModels()
-	for _, trigger in ipairs(NikNaks.CurrentMap:FindByClass("^trigger_*")) do
+	local bmodels = MAP:GetBModels()
+	for _, trigger in ipairs(MAP:FindByClass("^trigger_*")) do
 		if not trigger.model then
-			print("wtf")
+			print("trigger with bad model")
 			PrintTable(trigger)
 			continue
 		end
 		local model = tonumber(trigger.model:sub(2))
 		if not model then
-			print("wtf", trigger.model)
+			print("trigger with bad model", trigger.model)
 			continue
 		end
 		local bmodel = bmodels[model]
@@ -207,6 +211,36 @@ local function collectTriggerBrushes()
 		}
 
 		triggerBrushes[#triggerBrushes + 1] = brush_verts
+		local info = {
+			class = trigger.classname,
+			name = trigger.targetname,
+			target = trigger.target or trigger.landmark,
+			origin = trigger.origin,
+			mins = bmodel.mins,
+			maxs = bmodel.maxs,
+			outputs = {},
+		}
+		for k, v in next, trigger do
+			if not string.match(k, "^On") then continue end
+			info.outputs[k] = v
+		end
+
+		if trigger.target then
+			local target = MAP:FindByName(trigger.target)[1]
+
+			local landmark
+			if trigger.landmark then
+				landmark = MAP:FindByName(trigger.landmark)[1]
+			end
+
+			if target then
+				info.target_pos = landmark and target.origin - landmark.origin or target.origin
+			else
+				info.target_invalid = true
+			end
+		end
+
+		trigger_info[#trigger_info + 1] = info
 	end
 
 	return triggerBrushes
@@ -288,7 +322,7 @@ local function generateClipMeshes()
 		end
 
 		mesh.Begin(obj, MATERIAL_LINES, vertCount)
-		for i, side in ipairs(newBrush) do
+		for _, side in ipairs(newBrush) do
 			--local col = cols[(i - 1) % #cols]
 			for j, vert in ipairs(side) do
 				--mesh.Color(col[1], col[2], col[3], 255)
@@ -334,9 +368,9 @@ local TRIGGER_COLORS = {
 	[TYPE_ANTIPRE] = Color(192, 255, 0),
 	[TYPE_SPEED] = Color(255, 255, 0),
 	[TYPE_TELEPORT] = Color(0, 128, 255),
-	[TYPE_ONCE] = Color(255, 96, 0),
+	[TYPE_ONCE] = Color(164, 64, 0),
 	[TYPE_OC] = Color(0, 255, 255),
-	[TYPE_HURT] = Color(255, 0, 0),
+	[TYPE_HURT] = Color(128, 0, 0),
 }
 
 local function classify_trigger(brush)
@@ -522,6 +556,115 @@ hook.Add("PostDrawTranslucentRenderables", "showclips", function(depth, skybox, 
 			for _, obj in ipairs(showtriggers_triggerMeshes) do
 				if not obj:IsValid() then continue end
 				obj:Draw()
+			end
+		end
+	end
+end)
+
+local developer = GetConVar("developer")
+local ANGLE_ZERO = Angle()
+hook.Add("HUDPaint", "showtriggers", function()
+	if showtriggers and developer:GetBool() then
+		local eyepos = LocalPlayer():EyePos()
+		local forward = LocalPlayer():EyeAngles():Forward() * 32768
+		for _, trigger in ipairs(trigger_info) do
+			local hitpos = util.IntersectRayWithOBB(eyepos, forward, trigger.origin, ANGLE_ZERO, trigger.mins, trigger.maxs)
+			if hitpos ~= nil then
+				local center = trigger.origin:ToScreen()
+
+				surface.SetFont("BudgetLabel")
+
+				if trigger.target_pos then
+					local targetScr = trigger.target_pos:ToScreen()
+					surface.SetDrawColor(255, 128, 0, 255)
+					surface.DrawLine(center.x, center.y, targetScr.x, targetScr.y)
+
+					if targetScr.visible then
+						local tw = surface.GetTextSize(trigger.target)
+						surface.SetTextColor(255, 128, 0, 255)
+						surface.SetTextPos(targetScr.x - (tw / 2), targetScr.y)
+						surface.DrawText(trigger.target)
+					end
+				end
+
+				if not center.visible then continue end
+
+				local lines = 1
+				local longest = surface.GetTextSize(trigger.class)
+
+				if trigger.name then
+					local tw = surface.GetTextSize("Name: " .. trigger.name)
+					if tw > longest then longest = tw end
+					lines = lines + 1
+				end
+
+				if trigger.target then
+					local tw = surface.GetTextSize("Destination: " .. trigger.target)
+					if tw > longest then longest = tw end
+					lines = lines + 1
+				end
+
+				for on, outputs in next, trigger.outputs do
+					if isstring(outputs) then
+						local tw = surface.GetTextSize(on .. ": " .. outputs)
+						if tw > longest then longest = tw end
+					else
+						for _, output in ipairs(outputs) do
+							local tw = surface.GetTextSize(on .. ": " .. output)
+							if tw > longest then longest = tw end
+						end
+					end
+
+					lines = lines + (isstring(outputs) and 1 or #outputs)
+				end
+
+				local _, th = surface.GetTextSize("W")
+
+				local x = center.x - (longest / 2)
+				local y = center.y - (th * (lines / 2))
+
+				surface.SetTextColor(255, 255, 255, 255)
+				surface.SetTextPos(x, y)
+				surface.DrawText(trigger.class)
+				y = y + th
+
+				if trigger.name then
+					surface.SetTextColor(0, 192, 0, 255)
+					surface.SetTextPos(x, y)
+					surface.DrawText("Name: ")
+					surface.SetTextColor(255, 255, 255, 255)
+					surface.DrawText(trigger.name)
+					y = y + th
+				end
+
+				if trigger.target then
+					surface.SetTextColor(255, 128, 0, 255)
+					surface.SetTextPos(x, y)
+					surface.DrawText("Destination: ")
+					surface.SetTextColor(255, trigger.target_invalid and 0 or 255, trigger.target_invalid and 0 or 255, 255)
+					surface.DrawText(trigger.target)
+					y = y + th
+				end
+
+				for on, outputs in next, trigger.outputs do
+					if isstring(outputs) then
+						surface.SetTextColor(0, 192, 255, 255)
+						surface.SetTextPos(x, y)
+						surface.DrawText(on .. ": ")
+						surface.SetTextColor(255, 255, 255, 255)
+						surface.DrawText(outputs)
+						y = y + th
+					else
+						for _, output in ipairs(outputs) do
+							surface.SetTextColor(0, 192, 255, 255)
+							surface.SetTextPos(x, y)
+							surface.DrawText(on .. ": ")
+							surface.SetTextColor(255, 255, 255, 255)
+							surface.DrawText(output)
+							y = y + th
+						end
+					end
+				end
 			end
 		end
 	end
