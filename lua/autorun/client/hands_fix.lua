@@ -16,3 +16,7 @@ hook.Add("PlayerBindPress", "hands_use_fix", function(ply, bind, pressed, code)
 		end)
 	end
 end)
+
+hook.Add("PreDrawPlayerHands", "hands_shadow_fix", function(hands, vm, ply, wep)
+	hands:DestroyShadow()
+end)

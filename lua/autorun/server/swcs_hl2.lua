@@ -1,3 +1,6 @@
+local gamemode = engine.ActiveGamemode()
+if gamemode == "obsidianconflict" then return end
+
 local map = game.GetMap()
 if not string.match(map, "^d[1-3]_") and not string.match(map, "^ep[1-2]_") then return end
 

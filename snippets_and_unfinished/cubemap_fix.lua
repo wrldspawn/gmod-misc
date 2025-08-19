@@ -4,7 +4,7 @@ local function FixCubemaps()
 	local count = 0
 
 	for _, path in ipairs(mats) do
-		if not path:StartsWith("maps/") then continue end
+		--if not path:StartsWith("maps/") then continue end
 
 		local mat = Material(path)
 		local cubemap = mat:GetString("$envmap")
@@ -13,7 +13,7 @@ local function FixCubemaps()
 		local cubemap_mat = Material(cubemap)
 		if cubemap_mat and not cubemap_mat:IsError() then continue end
 
-		mat:SetUndefined("$envmap")
+		mat:SetString("$envmap", "engine/defaultcubemap")
 		count = count + 1
 	end
 
@@ -27,3 +27,4 @@ hook.Add("CalcView", "__CubemapFixer__", function()
 
 	FixCubemaps()
 end)
+

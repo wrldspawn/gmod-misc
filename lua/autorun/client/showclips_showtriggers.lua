@@ -565,104 +565,183 @@ local developer = GetConVar("developer")
 local ANGLE_ZERO = Angle()
 hook.Add("HUDPaint", "showtriggers", function()
 	if showtriggers and developer:GetBool() then
+		local to_render = {}
+
 		local eyepos = LocalPlayer():EyePos()
 		local forward = LocalPlayer():EyeAngles():Forward() * 32768
+
 		for _, trigger in ipairs(trigger_info) do
 			local hitpos = util.IntersectRayWithOBB(eyepos, forward, trigger.origin, ANGLE_ZERO, trigger.mins, trigger.maxs)
 			if hitpos ~= nil then
-				local center = trigger.origin:ToScreen()
+				to_render[#to_render + 1] = trigger
+			end
+		end
 
-				surface.SetFont("BudgetLabel")
+		local cy = 0
+		local longest_dist = 0
+		local smallest_dist = math.huge
 
-				if trigger.target_pos then
-					local targetScr = trigger.target_pos:ToScreen()
-					surface.SetDrawColor(255, 128, 0, 255)
-					surface.DrawLine(center.x, center.y, targetScr.x, targetScr.y)
+		for _, trigger in ipairs(to_render) do
+			local center = trigger.origin:ToScreen()
 
-					if targetScr.visible then
-						local tw = surface.GetTextSize(trigger.target)
-						surface.SetTextColor(255, 128, 0, 255)
-						surface.SetTextPos(targetScr.x - (tw / 2), targetScr.y)
-						surface.DrawText(trigger.target)
-					end
-				end
+			trigger.distance = trigger.origin:Distance(eyepos)
+			if trigger.distance > longest_dist then
+				longest_dist = trigger.distance
+			end
+			if trigger.distance < smallest_dist then
+				smallest_dist = trigger.distance
+			end
 
-				if not center.visible then continue end
+			if not center.visible then continue end
+			surface.SetFont("BudgetLabel")
 
-				local lines = 1
-				local longest = surface.GetTextSize(trigger.class)
+			local lines = 1
+			local longest = surface.GetTextSize(trigger.class)
 
-				if trigger.name then
-					local tw = surface.GetTextSize("Name: " .. trigger.name)
+			if trigger.name then
+				local tw = surface.GetTextSize("Name: " .. trigger.name)
+				if tw > longest then longest = tw end
+				lines = lines + 1
+			end
+
+			if trigger.target then
+				local tw = surface.GetTextSize("Destination: " .. trigger.target)
+				if tw > longest then longest = tw end
+				lines = lines + 1
+			end
+
+			for on, outputs in next, trigger.outputs do
+				if isstring(outputs) then
+					local tw = surface.GetTextSize(on .. ": " .. outputs)
 					if tw > longest then longest = tw end
-					lines = lines + 1
-				end
-
-				if trigger.target then
-					local tw = surface.GetTextSize("Destination: " .. trigger.target)
-					if tw > longest then longest = tw end
-					lines = lines + 1
-				end
-
-				for on, outputs in next, trigger.outputs do
-					if isstring(outputs) then
-						local tw = surface.GetTextSize(on .. ": " .. outputs)
+				else
+					for _, output in ipairs(outputs) do
+						local tw = surface.GetTextSize(on .. ": " .. output)
 						if tw > longest then longest = tw end
-					else
-						for _, output in ipairs(outputs) do
-							local tw = surface.GetTextSize(on .. ": " .. output)
-							if tw > longest then longest = tw end
-						end
 					end
-
-					lines = lines + (isstring(outputs) and 1 or #outputs)
 				end
 
-				local _, th = surface.GetTextSize("W")
+				lines = lines + (isstring(outputs) and 1 or #outputs)
+			end
 
-				local x = center.x - (longest / 2)
-				local y = center.y - (th * (lines / 2))
+			local _, th = surface.GetTextSize("W")
 
-				surface.SetTextColor(255, 255, 255, 255)
-				surface.SetTextPos(x, y)
-				surface.DrawText(trigger.class)
-				y = y + th
+			local h = th * (lines + 1)
 
-				if trigger.name then
-					surface.SetTextColor(0, 192, 0, 255)
-					surface.SetTextPos(x, y)
-					surface.DrawText("Name: ")
-					surface.SetTextColor(255, 255, 255, 255)
-					surface.DrawText(trigger.name)
-					y = y + th
-				end
+			cy = cy + center.y + (h / 2)
+		end
 
-				if trigger.target then
+		table.sort(to_render, function(a, b)
+			return a.distance > b.distance
+		end)
+
+		cy = cy / #to_render
+
+		longest_dist = longest_dist - smallest_dist
+
+		for i, trigger in ipairs(to_render) do
+			local center = trigger.origin:ToScreen()
+
+			surface.SetFont("BudgetLabel")
+
+			if trigger.target_pos then
+				local targetScr = trigger.target_pos:ToScreen()
+				surface.SetDrawColor(255, 128, 0, 255)
+				surface.DrawLine(center.x, center.y, targetScr.x, targetScr.y)
+
+				if targetScr.visible then
+					local tw = surface.GetTextSize(trigger.target)
 					surface.SetTextColor(255, 128, 0, 255)
-					surface.SetTextPos(x, y)
-					surface.DrawText("Destination: ")
-					surface.SetTextColor(255, trigger.target_invalid and 0 or 255, trigger.target_invalid and 0 or 255, 255)
+					surface.SetTextPos(targetScr.x - (tw / 2), targetScr.y)
 					surface.DrawText(trigger.target)
-					y = y + th
+				end
+			end
+
+			if not center.visible then continue end
+
+			local alpha = 255
+
+			--[[if #to_render > 1 then
+				local dist = (trigger.distance - smallest_dist) / longest_dist
+				alpha = 255 - (dist * 192)
+			end--]]
+
+			local lines = 1
+			local longest = surface.GetTextSize(trigger.class)
+
+			if trigger.name then
+				local tw = surface.GetTextSize("Name: " .. trigger.name)
+				if tw > longest then longest = tw end
+				lines = lines + 1
+			end
+
+			if trigger.target then
+				local tw = surface.GetTextSize("Destination: " .. trigger.target)
+				if tw > longest then longest = tw end
+				lines = lines + 1
+			end
+
+			for on, outputs in next, trigger.outputs do
+				if isstring(outputs) then
+					local tw = surface.GetTextSize(on .. ": " .. outputs)
+					if tw > longest then longest = tw end
+				else
+					for _, output in ipairs(outputs) do
+						local tw = surface.GetTextSize(on .. ": " .. output)
+						if tw > longest then longest = tw end
+					end
 				end
 
-				for on, outputs in next, trigger.outputs do
-					if isstring(outputs) then
-						surface.SetTextColor(0, 192, 255, 255)
+				lines = lines + (isstring(outputs) and 1 or #outputs)
+			end
+
+			local _, th = surface.GetTextSize("W")
+
+			local h = th * (lines + 1)
+
+			local x = center.x - (longest / 2)
+			local y = center.y - (th * (lines / 2))
+			--local y = cy - (h * (#to_render - i))
+
+			surface.SetTextColor(255, 255, 255, alpha)
+			surface.SetTextPos(x, y)
+			surface.DrawText(trigger.class)
+			y = y + th
+
+			if trigger.name then
+				surface.SetTextColor(0, 192, 0, alpha)
+				surface.SetTextPos(x, y)
+				surface.DrawText("Name: ")
+				surface.SetTextColor(255, 255, 255, alpha)
+				surface.DrawText(trigger.name)
+				y = y + th
+			end
+
+			if trigger.target then
+				surface.SetTextColor(255, 128, 0, alpha)
+				surface.SetTextPos(x, y)
+				surface.DrawText("Destination: ")
+				surface.SetTextColor(255, trigger.target_invalid and 0 or 255, trigger.target_invalid and 0 or 255, alpha)
+				surface.DrawText(trigger.target)
+				y = y + th
+			end
+
+			for on, outputs in next, trigger.outputs do
+				if isstring(outputs) then
+					surface.SetTextColor(0, 192, 255, alpha)
+					surface.SetTextPos(x, y)
+					surface.DrawText(on .. ": ")
+					surface.SetTextColor(255, 255, 255, alpha)
+					surface.DrawText(outputs)
+					y = y + th
+				else
+					for _, output in ipairs(outputs) do
+						surface.SetTextColor(0, 192, 255, alpha)
 						surface.SetTextPos(x, y)
 						surface.DrawText(on .. ": ")
-						surface.SetTextColor(255, 255, 255, 255)
-						surface.DrawText(outputs)
+						surface.SetTextColor(255, 255, 255, alpha)
+						surface.DrawText(output)
 						y = y + th
-					else
-						for _, output in ipairs(outputs) do
-							surface.SetTextColor(0, 192, 255, 255)
-							surface.SetTextPos(x, y)
-							surface.DrawText(on .. ": ")
-							surface.SetTextColor(255, 255, 255, 255)
-							surface.DrawText(output)
-							y = y + th
-						end
 					end
 				end
 			end
