@@ -78,7 +78,9 @@ net.Receive("PrettyPrintOnServer", function(len, ply)
 end)
 
 local function add(cmd, callback)
-	concommand.Add("pprint_" .. cmd, function(ply, cmd, args, argStr)
+	concommand.Add("pprint_" .. cmd, CLIENT and function(_, cmd, __, argStr)
+		RunConsoleCommand("cmd", cmd, argStr)
+	end or function(ply, cmd, args, argStr)
 		local a, b
 		easylua.End()
 		local ret, why = callback(ply, argStr)
