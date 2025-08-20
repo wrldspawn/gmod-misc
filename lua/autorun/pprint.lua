@@ -12,7 +12,9 @@ if CLIENT then
 
 	local commands = { "sv", "sh", "clients", "self", "both", "cl", "file" }
 	for _, cmd in ipairs(commands) do
-		concommand.Add("pprint_" .. cmd, function() end)
+		concommand.Add("pprint_" .. cmd, function(_, cmdName, _, argStr)
+			RunConsoleCommand("cmd", cmdName, argStr)
+		end)
 	end
 
 	return
@@ -78,9 +80,7 @@ net.Receive("PrettyPrintOnServer", function(len, ply)
 end)
 
 local function add(cmd, callback)
-	concommand.Add("pprint_" .. cmd, CLIENT and function(_, cmd, __, argStr)
-		RunConsoleCommand("cmd", cmd, argStr)
-	end or function(ply, cmd, args, argStr)
+	concommand.Add("pprint_" .. cmd, function(ply, _, _, argStr)
 		local a, b
 		easylua.End()
 		local ret, why = callback(ply, argStr)
