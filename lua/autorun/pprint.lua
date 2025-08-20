@@ -12,8 +12,8 @@ if CLIENT then
 
 	local commands = { "sv", "sh", "clients", "self", "both", "cl", "file" }
 	for _, cmd in ipairs(commands) do
-		concommand.Add("pprint_" .. cmd, function(_, cmdName, _, argStr)
-			RunConsoleCommand("cmd", cmdName, argStr)
+		concommand.Add("pprint_" .. cmd, function(_, cmdName, args)
+			RunConsoleCommand("cmd", cmdName, unpack(args))
 		end)
 	end
 
