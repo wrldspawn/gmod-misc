@@ -955,23 +955,53 @@ do -- animation sequence overrides
 		local start = ply:GetNW2Float("actx_start", 0)
 		if not start or start == 0 then return end
 
+		local loop = ply:GetNW2Bool("actx_loop", false)
+
 		local act = taunts[taunt]
-		if not act then return end
-		local seq = sequence_overrides[taunt]
-		if not seq then return end
+		if not act then
+			ply:SetNW2String("actx_taunt", "")
+			ply:SetNW2Float("actx_start", 0)
+			return
+		end
+		local override = sequence_overrides[taunt]
+		local seq = override or act
+		if not seq then
+			ply:SetNW2String("actx_taunt", "")
+			ply:SetNW2Float("actx_start", 0)
+			return
+		end
 
 		local seq_id = ply:LookupSequence(seq)
-		if not seq_id or seq_id == -1 then return end
+		if not seq_id or seq_id == -1 and override == nil then
+			seq_id = ply:SelectWeightedSequence(act)
+		end
+		if not seq_id or seq_id == -1 then
+			ply:SetNW2String("actx_taunt", "")
+			ply:SetNW2Float("actx_start", 0)
+			return
+		end
 
 		local len = ply:SequenceDuration(seq_id)
 		if CurTime() > start + len then
 			if SERVER then
-				ply:SetNW2String("actx_taunt", "")
-				ply:SetNW2Float("actx_start", 0)
+				if loop then
+					timer.Simple(0, function()
+						ply:SetNW2Float("actx_start", CurTime())
+						if override ~= nil then
+							ply:DoCustomAnimEvent(PLAYERANIMEVENT_CUSTOM_SEQUENCE, ACTX_EVENT)
+						else
+							ply:DoAnimationEvent(act)
+						end
+					end)
+				else
+					ply:SetNW2String("actx_taunt", "")
+					ply:SetNW2Float("actx_start", 0)
+				end
+				return
 			end
-			return
 		end
 
+		if override == nil then return end
 		return ACT_INVALID, seq_id
 	end)
 
@@ -1031,7 +1061,17 @@ end
 if SERVER then
 	concommand.Add(TAG, function(ply, cmd, args, argStr)
 		local taunt = args[1]
+		local loop = args[2] == "loop"
 		if not taunt or taunt == "" then return end
+
+		if taunt == "stop" then
+			ply:SetNW2String("actx_taunt", "")
+			ply:SetNW2Float("actx_start", 0)
+			ply:SetNW2Bool("actx_loop", false)
+			ply:AnimResetGestureSlot(GESTURE_SLOT_CUSTOM)
+			ply:AnimRestartMainSequence()
+			return
+		end
 
 		local act = taunts[taunt]
 		if act == nil then
@@ -1041,14 +1081,14 @@ if SERVER then
 
 		if hook.Run("PlayerShouldTaunt", ply, act) == false then return end
 
+		ply:SetNW2String("actx_taunt", taunt)
+		ply:SetNW2Float("actx_start", CurTime())
+		ply:SetNW2Bool("actx_loop", loop)
+
 		local sequence = sequence_overrides[taunt]
 		if sequence ~= nil then
-			ply:SetNW2String("actx_taunt", taunt)
-			ply:SetNW2Float("actx_start", CurTime())
 			ply:DoCustomAnimEvent(PLAYERANIMEVENT_CUSTOM_SEQUENCE, ACTX_EVENT)
 		else
-			ply:SetNW2String("actx_taunt", "")
-			ply:SetNW2Float("actx_start", CurTime())
 			ply:DoAnimationEvent(act)
 		end
 	end, actx_autocomplete, "Extended act command")
