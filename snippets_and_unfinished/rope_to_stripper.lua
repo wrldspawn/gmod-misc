@@ -2,7 +2,7 @@
 -- maybe ill write my own snapping thing some other day
 
 local template = [[
-; pole - rope2beam start: %d
+; rope2beam start: %d
 add:
 {
 	"classname" "info_target"
@@ -26,7 +26,7 @@ add:
 	"LightningEnd" "rope2beam_%d_end"
 	"spawnflags" "1"
 }
-; pole - rope2beam end: %d
+; rope2beam end: %d
 ]]
 
 if not file.Exists("pole", "DATA") then
@@ -41,8 +41,20 @@ concommand.Add("pole_rope_to_beam", function()
 	for _, rope in ipairs(ents.FindByClass("keyframe_rope")) do
 		if rope:CreatedByMap() then continue end
 
-		local pos1 = table.concat(rope.LPos1:ToTable(), " ")
-		local pos2 = table.concat(rope.LPos2:ToTable(), " ")
+		local pos1 = rope:GetInternalVariable("StartOffset")
+		local ent1 = rope:GetInternalVariable("m_hStartPoint")
+		local pos2 = rope:GetInternalVariable("EndOffset")
+		local ent2 = rope:GetInternalVariable("m_hEndPoint")
+
+		if not ent1:IsWorld() then
+			pos1 = ent1:LocalToWorld(pos1)
+		end
+		if not ent2:IsWorld() then
+			pos2 = ent2:LocalToWorld(pos2)
+		end
+
+		pos1 = table.concat(pos1:ToTable(), " ")
+		pos2 = table.concat(pos2:ToTable(), " ")
 
 		stripper = stripper .. string.format(template, i, pos1, i, pos2, i, i, i, i)
 

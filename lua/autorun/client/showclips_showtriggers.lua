@@ -103,16 +103,21 @@ local function collectClipBrushes()
 	local brushes = {}
 	for _, brush in ipairs(MAP:GetBrushes()) do
 		local invis = true
+		local sky = false
 		for i = 1, brush.numsides do
-			local tex = brush:GetTexture(i)
-			if tex:lower() ~= "tools/toolsinvisible" then
+			local tex = brush:GetTexture(i):lower()
+			if tex ~= "tools/toolsinvisible" then
 				invis = false
-				break
+			end
+			if tex == "tools/toolsskybox" then
+				sky = true
 			end
 		end
 
-		if invis == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
+		if invis == false and sky == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
 
+		brush.invis = invis
+		brush.sky = sky
 		brushes[#brushes + 1] = brush
 	end
 
@@ -162,6 +167,8 @@ local function collectClipBrushes()
 			end
 		end
 		brush_verts.contents = brush:GetContents()
+		brush_verts.invis = brush.invis
+		brush_verts.sky = brush.sky
 
 		clipBrushes[#clipBrushes + 1] = brush_verts
 	end
@@ -271,8 +278,11 @@ local function generateClipMeshes()
 		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
 			b = 0
 		end
-		if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
+		if brush.invis then
 			g = 255
+		elseif brush.sky then
+			r = 128
+			g = 192
 		end
 
 		local vertCount = 0
@@ -323,9 +333,7 @@ local function generateClipMeshes()
 
 		mesh.Begin(obj, MATERIAL_LINES, vertCount)
 		for _, side in ipairs(newBrush) do
-			--local col = cols[(i - 1) % #cols]
 			for j, vert in ipairs(side) do
-				--mesh.Color(col[1], col[2], col[3], 255)
 				mesh.Color(r, g, b, 255)
 				mesh.Position(vert)
 				mesh.AdvanceVertex()
