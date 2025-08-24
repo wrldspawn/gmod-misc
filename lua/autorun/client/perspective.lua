@@ -102,6 +102,7 @@ concommand.Add("mc_thirdperson", function()
 end)
 
 local mc_fov = CreateClientConVar("mc_fov", "30", true, false, "Zooming FOV", 1, 100)
+local mc_dist = CreateClientConVar("mc_dist", "128", true, false, "Distance away from the head position", 16, 384)
 
 local zooming = false
 local lastFOV = 0
@@ -117,24 +118,35 @@ hook.Add("PlayerBindPress", Tag2, function(ply, bind, pressed)
     if zooming and pressed then
         local step = ply:KeyDown(IN_SPEED) and 5 or 1
 
-        if bind == "invprev" and pressed then
+        if bind == "invprev" then
             mc_fov:SetInt(math.Clamp(mc_fov:GetInt() - step, 1, 100))
             lastFOV = RealTime()
             return true
-        elseif bind == "invnext" and pressed then
+        elseif bind == "invnext" then
             mc_fov:SetInt(math.Clamp(mc_fov:GetInt() + step, 1, 100))
             lastFOV = RealTime()
             return true
-        elseif bind == "+reload" and pressed then
+        elseif bind == "+reload" then
             mc_fov:SetInt(30)
             lastFOV = RealTime()
+            return true
+        end
+    elseif (perspective_enabled or thirdperson_mode ~= 0) and ply:KeyDown(IN_WALK) and pressed then
+        if bind == "invprev" then
+            mc_dist:SetInt(math.Clamp(mc_dist:GetInt() - 8, 16, 384))
+            return true
+        elseif bind == "invnext" then
+            mc_dist:SetInt(math.Clamp(mc_dist:GetInt() + 8, 16, 384))
+            return true
+        elseif bind == "+reload" then
+            mc_dist:SetInt(128)
             return true
         end
     end
 end)
 
 hook.Add("HUDShouldDraw", Tag2, function(elem)
-    if zooming and elem == "_chud_weaponswitcher" then
+    if (zooming or ((perspective_enabled or thirdperson_mode ~= 0) and LocalPlayer():KeyDown(IN_WALK))) and elem == "_chud_weaponswitcher" then
         return false
     end
 end)
@@ -350,6 +362,9 @@ end
 hook.Add("CalcView", Tag, function(ply, origin, angles, fov, znear, zfar)
     if not perspective_enabled and thirdperson_mode == 0 then return end
 
+    CAM_ANG.x = camPitch
+    CAM_ANG.y = camYaw
+
     local lply = LocalPlayer()
     local rag = lply:GetRagdollEntity()
     ---@type Entity
@@ -359,7 +374,7 @@ hook.Add("CalcView", Tag, function(ply, origin, angles, fov, znear, zfar)
     end
 
     local view = {
-        origin = getHeadPos(ent) + (CAM_ANG:Forward() * -clipToSpace(128 * ent:GetModelScale())),
+        origin = getHeadPos(ent) + (CAM_ANG:Forward() * -clipToSpace(mc_dist:GetInt() * ent:GetModelScale())),
         angles = CAM_ANG,
         drawviewer = true
     }
