@@ -101,7 +101,7 @@ concommand.Add("mc_thirdperson", function()
     end
 end)
 
-local mc_fov = CreateClientConVar("mc_fov", 30)
+local mc_fov = CreateClientConVar("mc_fov", "30", true, false, "Zooming FOV", 1, 100)
 
 local zooming = false
 local lastFOV = 0
@@ -143,17 +143,34 @@ local alpha = 0
 hook.Add("HUDPaint", Tag2, function()
     local x, y = ScrW() / 2, ScrH() * 0.75
 
-    if lastFOV + 2 > RealTime() then
+    local now = RealTime()
+
+    if lastFOV + 2 > now then
         alpha = 255
-    elseif lastFOV + 2 < RealTime() then
+    elseif lastFOV + 2 < now then
         alpha = Lerp(RealFrameTime() * 4, alpha, 0)
     end
 
     surface.SetFont("ChatFont")
-    local tw = surface.GetTextSize(mc_fov:GetInt())
 
-    local tw2 = draw.SimpleText("FOV set to: ", "ChatFont", x - tw, y, Color(192, 192, 192, alpha), TEXT_ALIGN_CENTER)
-    draw.SimpleText(mc_fov:GetInt(), "ChatFont", x - (tw / 2) + (tw2 / 2), y, Color(128, 255, 128, alpha), TEXT_ALIGN_CENTER)
+    local fov = tostring(mc_fov:GetInt())
+    local text = "FOV set to: "
+
+    local tw = surface.GetTextSize(fov)
+    local tw2 = surface.GetTextSize(text)
+
+    surface.SetTextColor(192, 192, 192, alpha)
+    surface.SetTextPos(x - tw, y)
+    surface.DrawText(text)
+
+    surface.SetTextColor(128, 255, 128, alpha)
+    surface.SetTextPos(x - (tw / 2) + (tw2 / 2), y)
+    surface.DrawText(fov)
+end)
+
+local m_sens = 3
+hook.Add("AdjustMouseSensitivity", Tag, function(sens)
+    m_sens = sens
 end)
 
 hook.Add("CreateMove", Tag, function(cmd)
@@ -174,17 +191,11 @@ hook.Add("CreateMove", Tag, function(cmd)
                 local min = time - lastUpdate
                 lastUpdate = time
 
-                local sens = 3 * 0.6 * 0.2
+                local sens = m_sens * 0.6 * 0.2
                 local mult = sens * sens * sens * 8
 
-                local deltaX
-                local deltaY
-
-                smoothDeltaX = smoothX(cmd:GetMouseX() * mult, min * mult)
-                smoothDeltaY = smoothY(cmd:GetMouseY() * mult, min * mult)
-
-                deltaX = smoothDeltaX
-                deltaY = smoothDeltaY
+                local deltaX = smoothX(cmd:GetMouseX() * mult, min * mult)
+                local deltaY = smoothY(cmd:GetMouseY() * mult, min * mult)
 
                 camYaw = camYaw - (deltaX / 8)
                 camPitch = camPitch + (deltaY / 8)
@@ -225,11 +236,8 @@ hook.Add("CreateMove", Tag, function(cmd)
     local deltaY
 
     if smooth:GetBool() or zooming then
-        smoothDeltaX = smoothX(cmd:GetMouseX() * mult, min * mult)
-        smoothDeltaY = smoothY(cmd:GetMouseY() * mult, min * mult)
-
-        deltaX = smoothDeltaX
-        deltaY = smoothDeltaY
+        deltaX = smoothX(cmd:GetMouseX() * mult, min * mult)
+        deltaY = smoothY(cmd:GetMouseY() * mult, min * mult)
     else
         if not zooming then
             smoothX_actualSum = 0
@@ -255,32 +263,39 @@ hook.Add("CreateMove", Tag, function(cmd)
     if perspective_enabled then
         cmd:SetViewAngles(Angle(oldPitch, oldYaw, 0))
     else
-        cmd:SetViewAngles(Angle(camPitch * (thirdperson_mode == 2 and -1 or 1), camYaw + (thirdperson_mode == 2 and 180 or 0), 0))
+        cmd:SetViewAngles(Angle(camPitch * (thirdperson_mode == 2 and -1 or 1),
+            camYaw + (thirdperson_mode == 2 and 180 or 0), 0))
     end
 end)
 
+local CAM_ANG = Angle(camPitch, camYaw, 0)
 local function clipToSpace(dist)
-    local vec1 = LocalPlayer():EyePos()
-    local vec2 = vec1 - Angle(camPitch, camYaw, 0):Forward() * dist
+    local lply = LocalPlayer()
+    local vec1 = lply:EyePos()
+    local vec2 = vec1 - CAM_ANG:Forward() * dist
 
-    local ignore = {LocalPlayer()}
+    ---@type Entity[]
+    local ignore = { lply }
 
-    for _, child in pairs(LocalPlayer():GetChildren()) do
+    for _, child in pairs(lply:GetChildren()) do
         if child:IsVehicle() and child:GetDriver():IsPlayer() then
             ignore[#ignore + 1] = child
             ignore[#ignore + 1] = child:GetDriver()
         end
     end
-    local tr = util.TraceLine({
+
+    local tr_p = {
         start = vec1,
         endpos = vec2,
         filter = ignore,
         mask = MASK_SOLID
-    })
+    }
+
+    local tr = util.TraceLine(tr_p)
 
     local ent = tr.Entity
 
-    if IsValid(ent) and ent:GetCollisionGroup() ~= COLLISION_GROUP_NONE and ent:GetCollisionGroup() ~= LocalPlayer():GetCollisionGroup() then
+    if IsValid(ent) and ent:GetCollisionGroup() ~= COLLISION_GROUP_NONE and ent:GetCollisionGroup() ~= lply:GetCollisionGroup() then
         ignore[#ignore + 1] = ent
         for _, child in pairs(ent:GetChildren()) do
             ignore[#ignore + 1] = child
@@ -294,15 +309,10 @@ local function clipToSpace(dist)
         end
     end
 
-    tr = util.TraceLine({
-        start = vec1,
-        endpos = vec2,
-        filter = ignore,
-        mask = MASK_SOLID
-    })
+    tr = util.TraceLine(tr_p)
 
     if tr.Hit then
-        local d = tr.HitPos:Distance(LocalPlayer():EyePos())
+        local d = tr.HitPos:Distance(lply:EyePos())
         if d < dist then
             dist = d
         end
@@ -321,8 +331,9 @@ local function getHeadPos(ply)
         end
     end
 
-    if not bone or (not ply:GetBoneName(bone):lower():find("head") and ply:GetBoneCount() >= bone) then
-        for i = 0, ply:GetBoneCount() do
+    local bcount = ply:GetBoneCount()
+    if not bone or (not ply:GetBoneName(bone):lower():find("head") and bcount >= bone) then
+        for i = 0, bcount do
             if ply:GetBoneName(i):lower():find("head") then
                 pos = ply:GetBonePosition(i)
                 if not pos then
@@ -339,11 +350,17 @@ end
 hook.Add("CalcView", Tag, function(ply, origin, angles, fov, znear, zfar)
     if not perspective_enabled and thirdperson_mode == 0 then return end
 
-    local camAng = Angle(camPitch, camYaw, 0)
+    local lply = LocalPlayer()
+    local rag = lply:GetRagdollEntity()
+    ---@type Entity
+    local ent = lply
+    if not lply:Alive() and rag:IsValid() then
+        ent = rag
+    end
 
     local view = {
-        origin = getHeadPos(LocalPlayer()) + (camAng:Forward() * -clipToSpace(128 * LocalPlayer():GetModelScale())),
-        angles = camAng,
+        origin = getHeadPos(ent) + (CAM_ANG:Forward() * -clipToSpace(128 * ent:GetModelScale())),
+        angles = CAM_ANG,
         drawviewer = true
     }
 
@@ -404,8 +421,8 @@ hook.Add("CreateMove", Tag2, function(cmd)
 
     local deltaX
     local deltaY
-    smoothDeltaX = smoothX(cmd:GetMouseX() * mult, min * mult)
-    smoothDeltaY = smoothY(cmd:GetMouseY() * mult, min * mult)
+    local smoothDeltaX = smoothX(cmd:GetMouseX() * mult, min * mult)
+    local smoothDeltaY = smoothY(cmd:GetMouseY() * mult, min * mult)
 
     deltaX = smoothDeltaX
     deltaY = smoothDeltaY
@@ -417,5 +434,8 @@ hook.Add("CreateMove", Tag2, function(cmd)
         camPitch = camPitch > 0 and 90 or -90
     end
 
-    cmd:SetViewAngles(Angle(camPitch, camYaw, 0))
+    CAM_ANG.x = camPitch
+    CAM_ANG.y = camYaw
+
+    cmd:SetViewAngles(CAM_ANG)
 end)
