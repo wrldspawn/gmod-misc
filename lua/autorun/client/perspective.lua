@@ -176,7 +176,7 @@ hook.Add("HUDPaint", Tag2, function()
     surface.DrawText(text)
 
     surface.SetTextColor(128, 255, 128, alpha)
-    surface.SetTextPos(x - (tw / 2) + (tw2 / 2), y)
+    surface.SetTextPos(x - tw + tw2, y)
     surface.DrawText(fov)
 end)
 
