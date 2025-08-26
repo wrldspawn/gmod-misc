@@ -116,13 +116,23 @@ local function collectClipBrushes()
 
 		if invis == false and sky == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
 
+		if sky then
+			local skySides = {}
+			for i = 1, brush.numsides do
+				if brush:GetTexture(i):lower() == "tools/toolsskybox" then
+					skySides[i] = true
+				end
+			end
+			brush.skySides = skySides
+		end
+
 		brush.invis = invis
 		brush.sky = sky
 		brushes[#brushes + 1] = brush
 	end
 
 	-- this implementation is not perfect but it at least works
-	-- (theres a weird ring on surf_adrift_fix)
+	-- (theres a weird ring on surf_adrift_fix, a lot of maps have brushes at origin)
 	local clipBrushes = {}
 	for _, brush in ipairs(brushes) do
 		local planes = {}
@@ -169,6 +179,7 @@ local function collectClipBrushes()
 		brush_verts.contents = brush:GetContents()
 		brush_verts.invis = brush.invis
 		brush_verts.sky = brush.sky
+		brush_verts.skySides = brush.skySides
 
 		clipBrushes[#clipBrushes + 1] = brush_verts
 	end
@@ -265,35 +276,48 @@ table.Empty(showclips_clipMeshes)
 local function generateClipMeshes()
 	local clipBrushes = collectClipBrushes()
 
-	-- translucent triangles for every face
 	for _, brush in ipairs(clipBrushes) do
-		local obj = Mesh()
 		local contents = brush.contents
-		local r = 255
-		local g = 0
-		local b = 255
-		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
-			r = 128
-		end
-		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
-			b = 0
+		local r = 231
+		local g = 16
+		local b = 148
+		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 then
+			if bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
+				r = 140
+				g = 32
+				b = 211
+			else
+				r = 211
+				g = 57
+				b = 32
+			end
 		end
 		if brush.invis then
+			r = 255
 			g = 255
+			b = 255
 		elseif brush.sky then
-			r = 128
-			g = 192
+			r = 178
+			g = 225
+			b = 255
 		end
 
+		-- face
 		local vertCount = 0
 		for _, side in ipairs(brush) do
 			vertCount = vertCount + #side
 		end
 
+		local obj = Mesh()
 		mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
-		for _, side in ipairs(brush) do
+		for i, side in ipairs(brush) do
+			local skySide = true
+			if brush.sky and not brush.skySides[i] then
+				skySide = false
+			end
+
 			for _, vert in ipairs(side) do
-				mesh.Color(r, g, b, 32)
+				mesh.Color(r, g, b, skySide and 32 or 0)
 				mesh.Position(vert)
 				mesh.AdvanceVertex()
 			end
@@ -301,36 +325,19 @@ local function generateClipMeshes()
 		mesh.End()
 
 		showclips_clipMeshes[#showclips_clipMeshes + 1] = obj
-	end
 
-	-- outline
-	for _, brush in ipairs(clipBrushes) do
-		local obj = Mesh()
-		local contents = brush.contents
-		local r = 255
-		local g = 0
-		local b = 255
-		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
-			r = 128
-		end
-		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 and bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
-			b = 0
-		end
-		if bit.band(contents, CONTENTS_TRANSLUCENT) ~= 0 then
-			g = 255
-		end
-
-		local vertCount = 0
+		-- outline
+		local lineCount = 0
 		local newBrush = {}
 
 		for _, side in ipairs(brush) do
 			newBrush[#newBrush + 1] = dedupe(side)
 		end
-
 		for _, side in ipairs(newBrush) do
-			vertCount = vertCount + #side
+			lineCount = lineCount + #side
 		end
 
+		obj = Mesh()
 		mesh.Begin(obj, MATERIAL_LINES, vertCount)
 		for _, side in ipairs(newBrush) do
 			for j, vert in ipairs(side) do
@@ -371,14 +378,23 @@ local TYPE_OC = 5
 local TYPE_HURT = 6
 
 local TRIGGER_COLORS = {
-	[TYPE_UNKNOWN] = Color(255, 128, 0),
+	[TYPE_UNKNOWN] = Color(255, 156, 0),
 	[TYPE_MULTIPLE] = Color(0, 255, 0),
-	[TYPE_ANTIPRE] = Color(192, 255, 0),
-	[TYPE_SPEED] = Color(255, 255, 0),
+	[TYPE_ANTIPRE] = Color(128, 192, 0),
+	[TYPE_SPEED] = Color(192, 255, 0),
 	[TYPE_TELEPORT] = Color(0, 128, 255),
-	[TYPE_ONCE] = Color(164, 64, 0),
+	[TYPE_ONCE] = Color(164, 100, 0),
 	[TYPE_OC] = Color(0, 255, 255),
-	[TYPE_HURT] = Color(128, 0, 0),
+	[TYPE_HURT] = Color(164, 0, 0),
+}
+
+local OC_TRIGGERS = {
+	trigger_once_oc = true,
+	trigger_multiple_oc = true,
+	trigger_auto_crouch = true,
+	trigger_nocollide = true,
+	trigger_player_count = true,
+	trigger_vehiclespawn = true,
 }
 
 local function classify_trigger(brush)
@@ -390,10 +406,15 @@ local function classify_trigger(brush)
 
 		if brush.outputs.OnStartTouch then
 			for _, data in ipairs(brush.outputs.OnStartTouch) do
-				if data:find("gravity 40") then -- Gravity anti-prespeed https://gamebanana.com/prefabs/6760.
+				local output = data:lower()
+				if output:find("gravity 40") then -- Gravity anti-prespeed https://gamebanana.com/prefabs/6760.
 					type = TYPE_ANTIPRE
 					break
-				elseif data:find("basevelocity") then -- some surf map boosters (e.g. surf_quirky)
+				elseif
+						output:find("basevelocity") -- some surf map boosters (e.g. surf_quirky)
+						or
+						output:find("modifyspeed") -- player_speedmod
+				then
 					type = TYPE_SPEED
 					break
 				end
@@ -402,10 +423,13 @@ local function classify_trigger(brush)
 
 		if brush.outputs.OnEndTouch then
 			for _, data in ipairs(brush.outputs.OnEndTouch) do
+				local output = data:lower()
 				if
-						data:find("gravity -") -- Gravity booster https://gamebanana.com/prefabs/6677.
+						output:find("gravity -") -- Gravity booster https://gamebanana.com/prefabs/6677.
 						or
-						data:find("basevelocity") -- Basevelocity booster https://gamebanana.com/prefabs/7118.
+						output:find("basevelocity") -- Basevelocity booster https://gamebanana.com/prefabs/7118.
+						or
+						output:find("modifyspeed") -- player_speedmod
 				then
 					type = TYPE_SPEED
 					break
@@ -420,7 +444,7 @@ local function classify_trigger(brush)
 		type = TYPE_ONCE
 	elseif classname == "trigger_hurt" then
 		type = TYPE_HURT
-	elseif classname:find("_oc$") then
+	elseif OC_TRIGGERS[classname] then
 		type = TYPE_OC
 	end
 
@@ -431,15 +455,15 @@ local function generateTriggerMeshes()
 	local triggerBrushes = collectTriggerBrushes()
 
 	for _, brush in ipairs(triggerBrushes) do
-		local obj = Mesh()
-
 		local col = classify_trigger(brush)
 
+		-- face
 		local vertCount = 0
 		for _, side in ipairs(brush) do
 			vertCount = vertCount + #side
 		end
 
+		local obj = Mesh()
 		mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
 		for _, side in ipairs(brush) do
 			for _, vert in ipairs(side) do
@@ -451,27 +475,21 @@ local function generateTriggerMeshes()
 		mesh.End()
 
 		showtriggers_triggerMeshes[#showtriggers_triggerMeshes + 1] = obj
-	end
 
-	-- outline
-	for _, brush in ipairs(triggerBrushes) do
-		local obj = Mesh()
-
-		local col = classify_trigger(brush)
-
-		local vertCount = 0
+		-- outline
+		local lineCount = 0
 		local newBrush = {}
-
 		for _, side in ipairs(brush) do
 			newBrush[#newBrush + 1] = dedupe(side)
 		end
 
 		for _, side in ipairs(newBrush) do
-			vertCount = vertCount + #side
+			lineCount = lineCount + #side
 		end
 
+		obj = Mesh()
 		mesh.Begin(obj, MATERIAL_LINES, vertCount)
-		for i, side in ipairs(newBrush) do
+		for _, side in ipairs(newBrush) do
 			for j, vert in ipairs(side) do
 				mesh.Color(col.r, col.g, col.b, 255)
 				mesh.Position(vert)
@@ -585,69 +603,7 @@ hook.Add("HUDPaint", "showtriggers", function()
 			end
 		end
 
-		local cy = 0
-		local longest_dist = 0
-		local smallest_dist = math.huge
-
 		for _, trigger in ipairs(to_render) do
-			local center = trigger.origin:ToScreen()
-
-			trigger.distance = trigger.origin:Distance(eyepos)
-			if trigger.distance > longest_dist then
-				longest_dist = trigger.distance
-			end
-			if trigger.distance < smallest_dist then
-				smallest_dist = trigger.distance
-			end
-
-			if not center.visible then continue end
-			surface.SetFont("BudgetLabel")
-
-			local lines = 1
-			local longest = surface.GetTextSize(trigger.class)
-
-			if trigger.name then
-				local tw = surface.GetTextSize("Name: " .. trigger.name)
-				if tw > longest then longest = tw end
-				lines = lines + 1
-			end
-
-			if trigger.target then
-				local tw = surface.GetTextSize("Destination: " .. trigger.target)
-				if tw > longest then longest = tw end
-				lines = lines + 1
-			end
-
-			for on, outputs in next, trigger.outputs do
-				if isstring(outputs) then
-					local tw = surface.GetTextSize(on .. ": " .. outputs)
-					if tw > longest then longest = tw end
-				else
-					for _, output in ipairs(outputs) do
-						local tw = surface.GetTextSize(on .. ": " .. output)
-						if tw > longest then longest = tw end
-					end
-				end
-
-				lines = lines + (isstring(outputs) and 1 or #outputs)
-			end
-
-			local _, th = surface.GetTextSize("W")
-
-			local h = th * (lines + 1)
-
-			cy = cy + center.y + (h / 2)
-		end
-
-		table.sort(to_render, function(a, b)
-			return a.distance > b.distance
-		end)
-
-		cy = cy / #to_render
-
-		longest_dist = longest_dist - smallest_dist
-
-		for i, trigger in ipairs(to_render) do
 			local center = trigger.origin:ToScreen()
 
 			surface.SetFont("BudgetLabel")
@@ -669,11 +625,6 @@ hook.Add("HUDPaint", "showtriggers", function()
 
 			local alpha = 255
 
-			--[[if #to_render > 1 then
-				local dist = (trigger.distance - smallest_dist) / longest_dist
-				alpha = 255 - (dist * 192)
-			end--]]
-
 			local lines = 1
 			local longest = surface.GetTextSize(trigger.class)
 
@@ -705,11 +656,8 @@ hook.Add("HUDPaint", "showtriggers", function()
 
 			local _, th = surface.GetTextSize("W")
 
-			local h = th * (lines + 1)
-
 			local x = center.x - (longest / 2)
 			local y = center.y - (th * (lines / 2))
-			--local y = cy - (h * (#to_render - i))
 
 			surface.SetTextColor(255, 255, 255, alpha)
 			surface.SetTextPos(x, y)
