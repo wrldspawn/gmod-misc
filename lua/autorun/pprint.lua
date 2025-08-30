@@ -2,11 +2,14 @@ include("clib/pprint.lua")
 include("clib/syntax_parser.lua")
 
 if CLIENT then
-	function PrettyPrintOnServer(...)
+	function PrettyPrintOnServer(line, ...)
 		local out = prettyprint.toStringWithColor(...)
 		local data = util.Compress(out)
+		local len = #data
 		net.Start("PrettyPrintOnServer")
-		net.WriteData(data, #data)
+		net.WriteString(line)
+		net.WriteInt(len, 32)
+		net.WriteData(data, len)
 		net.SendToServer()
 	end
 
@@ -30,8 +33,7 @@ local function tagline(ply, target)
 		MsgC(HSVToColor(hue, 0.375, 1), pp:sub(i, i))
 	end
 
-	MsgC(Color(255, 181, 80), (": %s -> %s]"):format(ply, target))
-	MsgN("")
+	MsgC(Color(255, 181, 80), (": %s -> %s] "):format(ply, target))
 end
 
 local function tagline1(target)
@@ -42,8 +44,17 @@ local function tagline1(target)
 		MsgC(HSVToColor(hue, 0.375, 1), pp:sub(i, i))
 	end
 
-	MsgC(Color(255, 181, 80), (": %s]"):format(target))
-	MsgN("")
+	MsgC(Color(255, 181, 80), (": %s] "):format(target))
+end
+
+local function showLine(line)
+	if syntaxParser then
+		local parsed = syntaxParser.parseText(line)
+		parsed.Print()
+		MsgN("")
+	else
+		print(line)
+	end
 end
 
 util.AddNetworkString("PrettyPrintOnServer")
@@ -53,8 +64,15 @@ net.Receive("PrettyPrintOnServer", function(len, ply)
 	if not ply:IsAdmin() then return end
 
 	tagline(_G.me:Name(), ply:Name())
-	local data = net.ReadData(1024 * 1024)
+	local line = net.ReadString()
+	showLine(line)
+
+	local dlen = net.ReadInt(32)
+	local data = net.ReadData(dlen)
 	local str = util.Decompress(data)
+
+	if not str then return end
+
 	local out = {}
 	local pattern = "\x0E(.-)\x0F"
 	local parts = string.Explode(pattern, str, true)
@@ -112,39 +130,45 @@ local function pprint(line, id)
 local id = %q
 
 local function compile(code, id)
-		local fullCode = "return function() " .. code .. "\nend"
-		local compiled = CompileString(fullCode, id, false)
+	local fullCode = "return function() " .. code .. "\nend"
+	local compiled = CompileString(fullCode, id, false)
 
-		if isstring(compiled) then
-				return nil, compiled
-		end
+	if isstring(compiled) then
+		return nil, compiled
+	end
 
-		local f = compiled()
+	local f = compiled()
 
-		if not f then
-				return nil, "Unexpected error."
-		end
+	if not f then
+		return nil, "Unexpected error."
+	end
 
-		return f
+	return f
 end
 
 local eval = compile("return " .. toEval, id)
 
 if not eval then
-		local f, err = compile(toEval, id)
-		eval = f
-		if err then
-				ErrorNoHalt(id .. ": " .. err) return end
+	local f, err = compile(toEval, id)
+	eval = f
+	if err then
+		ErrorNoHalt(id .. ": " .. err)
+		return
+	end
 end
 
 if eval then
-		setfenv(eval, easylua.EnvMeta)
+	setfenv(eval, easylua.EnvMeta)
 
-		local func = prettyprint.show
-		if CLIENT then func = PrettyPrintOnServer else func = prettyprint.show end
-		prettyprint.StartLimit()
-		func(eval())
-		prettyprint.EndLimit()
+	local func = prettyprint.show
+	if CLIENT then
+		func = function(...) PrettyPrintOnServer(toEval, ...) end
+	else
+		func = prettyprint.show
+	end
+	prettyprint.StartLimit()
+	func(eval())
+	prettyprint.EndLimit()
 end]], line, id)
 
 	return script:gsub("    ", ""):gsub("\t", ""):gsub("\n", " ")
@@ -158,36 +182,38 @@ local function pprint_self(line, id)
 local id = %q
 
 local function compile(code, id)
-		local fullCode = "return function() " .. code .. "\nend"
-		local compiled = CompileString(fullCode, id, false)
+	local fullCode = "return function() " .. code .. "\nend"
+	local compiled = CompileString(fullCode, id, false)
 
-		if isstring(compiled) then
-				return nil, compiled
-		end
+	if isstring(compiled) then
+		return nil, compiled
+	end
 
-		local f = compiled()
+	local f = compiled()
 
-		if not f then
-				return nil, "Unexpected error."
-		end
+	if not f then
+		return nil, "Unexpected error."
+	end
 
-		return f
+	return f
 end
 
 local eval = compile("return " .. toEval, id)
 
 if not eval then
-		local f, err = compile(toEval, id)
-		eval = f
-		if err then
-				ErrorNoHalt(id .. ": " .. err) return end
+	local f, err = compile(toEval, id)
+	eval = f
+	if err then
+		ErrorNoHalt(id .. ": " .. err)
+		return
+	end
 end
 
 if eval then
-		setfenv(eval, easylua.EnvMeta)
-		prettyprint.StartPrintTable()
-		prettyprint.show(eval())
-		prettyprint.EndPrintTable()
+	setfenv(eval, easylua.EnvMeta)
+	prettyprint.StartPrintTable()
+	prettyprint.show(eval())
+	prettyprint.EndPrintTable()
 end]], line, id)
 
 	return script:gsub("    ", ""):gsub("\t", ""):gsub("\n", " ")
@@ -208,6 +234,7 @@ add("sv", function(ply, line)
 	end
 
 	tagline(ply:Name(), "Server")
+	showLine(line)
 
 	return luadev.RunOnServer(pprint(line, "pprint"), X(ply, "pprint"), {
 		ply = ply
@@ -229,7 +256,9 @@ add("sh", function(ply, line)
 	end
 
 	tagline(ply:Name(), "Shared")
+	MsgN("")
 	tagline1("Server")
+	showLine(line)
 
 	return luadev.RunOnShared(pprint(line, "pprints"), X(ply, "pprints"), {
 		ply = ply
@@ -249,6 +278,7 @@ add("clients", function(ply, line)
 	end
 
 	tagline(ply:Name(), "Clients")
+	showLine(line)
 
 	return luadev.RunOnClients(pprint(line, "pprintc"), X(ply, "pprintc"), {
 		ply = ply
@@ -341,31 +371,33 @@ add("both", function(ply, line)
 	end
 
 	tagline(ply:Name(), "Both")
+	MsgN("")
 
 	luadev.RunOnClient(pprint(line, "pprintb"), ply, X(ply, "pprintb"), {
 		ply = ply
 	})
 
 	tagline1("Server")
+	showLine(line)
 
 	return luadev.RunOnServer(pprint(line, "pprintb"), X(ply, "pprintb"), {
 		ply = ply
 	})
 end)
 
-local LINES_PATTERN = ":(%d+)[-]?(%d-)$"
+local LINES_PATTERN = ":%s*(%d+)[-]?(%d-)$"
 
 add("file", function(ply, line)
 	if not ply:IsAdmin() then return end
 	if not line then return end
 	local original_line = line
-	line = line:gsub("^lua/", ""):gsub(LINES_PATTERN, "")
+	line = line:gsub("^lua/", ""):gsub("^gamemodes/", ""):gsub(LINES_PATTERN, "")
 
-	if not file.Exists(line, "LUA") or not file.Exists(line, "LSV") then
+	if not file.Exists(line, "LUA") or not file.Exists(line, "lsv") then
 		return false, "Unknown file"
 	end
 
-	local contents = file.Read(line, "LUA") or file.Read(line, "LSV")
+	local contents = file.Read(line, "LUA") or file.Read(line, "lsv")
 	local target_lines = ""
 	if original_line:find(LINES_PATTERN) then
 		local start_line, end_line = original_line:match(LINES_PATTERN)
@@ -397,5 +429,7 @@ add("file", function(ply, line)
 	local parsed = syntaxParser.parseText(contents)
 
 	tagline1(Format("%s printing file: %s%s", ply:Name(), line, target_lines))
+	MsgN("")
 	parsed.Print()
+	MsgN("")
 end)

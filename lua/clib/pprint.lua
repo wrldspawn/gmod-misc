@@ -1,78 +1,99 @@
 -- Based on MDave's thing
 -- https://gist.github.com/mentlerd/d56ad9e6361f4b86af84
-AddCSLuaFile()
+if AddCSLuaFile then AddCSLuaFile() end
 module("prettyprint", package.seeall)
 
-local type_colors        = {
-	[TYPE_BOOL]     = Color(230, 138, 193),
-	[TYPE_NUMBER]   = Color(180, 164, 222),
-	[TYPE_STRING]   = Color(162, 186, 168),
-	[TYPE_FUNCTION] = Color(245, 93, 143),
+local TypeID = TypeID
+-- menu state
+if not TypeID then
+	TypeID = function(t)
+		if isstring(t) then
+			return TYPE_STRING
+		elseif isfunction(t) then
+			return TYPE_FUNCTION
+		elseif istable(t) then
+			return TYPE_TABLE
+		elseif isnumber(t) then
+			return TYPE_NUMBER
+		elseif isbool(t) then
+			return TYPE_BOOL
+		else
+			return TYPE_NIL
+		end
+	end
+end
+
+local COLORS_TYPE    = {
+	[TYPE_BOOL]     = Color(230, 185, 157),
+	[TYPE_NUMBER]   = Color(226, 158, 202),
+	[TYPE_STRING]   = Color(144, 185, 159),
+	[TYPE_FUNCTION] = Color(133, 181, 186),
 }
 
-local color_global       = Color(180, 164, 222)
+local COLOR_GLOBAL   = Color(172, 161, 207)
 
-local color_neutral      = Color(222, 219, 235)
-local color_name         = Color(170, 186, 231)
+local COLOR_NEUTRAL  = Color(201, 199, 205)
+local COLOR_NAME     = Color(212, 192, 192)
 
-local color_comment      = Color(93, 93, 93)
+local COLOR_COMMENT  = Color(129, 117, 117)
+
+local COLOR_WHITE    = Color(255, 255, 255)
 
 -- 'nil' value
-local NIL                = {}
+local NIL            = {}
 
 -- Localise for faster access
-local pcall              = pcall
-local next               = next
-local pairs              = pairs
-local ipairs             = ipairs
+local pcall          = pcall
+local next           = next
+local pairs          = pairs
+local ipairs         = ipairs
 
-local isstring           = isstring
-local isnumber           = isnumber
-local isvector           = isvector
-local isangle            = isangle
-local isentity           = isentity
-local isfunction         = isfunction
-local ispanel            = ispanel
+local isstring       = isstring
+local isnumber       = isnumber
+local isvector       = isvector
+local isangle        = isangle
+local isentity       = isentity
+local isfunction     = isfunction
+local ispanel        = ispanel
 
-local IsColor            = IsColor
-local IsValid            = IsValid
+local IsColor        = IsColor
+local IsValid        = IsValid
 
-local tonumber           = tonumber
-local tostring           = tostring
+local tonumber       = tonumber
+local tostring       = tostring
 
-local string_len         = string.len
-local string_sub         = string.sub
-local string_find        = string.find
-local string_byte        = string.byte
-local string_match       = string.match
-local string_gsub        = string.gsub
-local string_char        = string.char
-local string_format      = string.format
-local string_rep         = string.rep
-local string_split       = string.Split
-local string_lower       = string.lower
+local string_len     = string.len
+local string_sub     = string.sub
+local string_find    = string.find
+local string_byte    = string.byte
+local string_match   = string.match
+local string_gsub    = string.gsub
+local string_char    = string.char
+local string_format  = string.format
+local string_rep     = string.rep
+local string_split   = string.Split
+local string_lower   = string.lower
 
-local table_concat       = table.concat
-local table_insert       = table.insert
-local table_sort         = table.sort
+local table_concat   = table.concat
+local table_insert   = table.insert
+local table_sort     = table.sort
 
-local math_min           = math.min
-local math_max           = math.max
+local math_min       = math.min
+local math_max       = math.max
 
-local debug_getinfo      = debug.getinfo
-local debug_getlocal     = debug.getlocal
-local debug_getmetatable = debug.getmetatable
+local debug_getinfo  = debug.getinfo
+local debug_getlocal = debug.getlocal
 
 -- Stream interface
 local gMsgF -- Print fragment
 local gMsgN -- Print newline
 local gMsgC -- Set print color
 
-local _MsgC              = _G.MsgC
-local _MsgN              = _G.MsgN
+local _MsgC          = _G.MsgC
+local _MsgN          = _G.MsgN
 
 do
-	local grep_color = Color(235, 70, 70)
+	local COLOR_GREP = Color(235, 70, 70)
 
 	-- Grep parameters (static between gBegin/gEnd)
 	local grep
@@ -104,13 +125,13 @@ do
 
 	local function gFlushEx(raw, markers, colors, baseColor)
 		-- Print entire buffer
-		local len       = string_len(raw)
+		local len    = string_len(raw)
 
 		-- Keep track of the current line properties
-		local index     = 1
-		local marker    = 1
+		local index  = 1
+		local marker = 1
 
-		local currColor = baseColor
+		currColor    = baseColor
 
 		-- Method to print to a preset area
 		local function printToIndex(limit, color)
@@ -119,7 +140,7 @@ do
 			-- Print all marker areas until we would overshoot
 			while mark and mark < limit do
 				-- Catch up to the marker
-				MsgC(color or currColor or color_neutral, string_sub(raw, index, mark))
+				MsgC(color or currColor or COLOR_NEUTRAL, string_sub(raw, index, mark))
 				index     = mark + 1
 
 				-- Set new color
@@ -131,17 +152,17 @@ do
 			end
 
 			-- Print the remaining between the last marker and the limit
-			MsgC(color or currColor or color_neutral, string_sub(raw, index, limit))
+			MsgC(color or currColor or COLOR_NEUTRAL, string_sub(raw, index, limit))
 			index = limit + 1
 		end
 
 		-- Grep!
-		local match, last = 1
+		local last = 1
 		local from, to = string_find(raw, grep, 0, grep_raw)
 
 		while from do
 			printToIndex(from - 1)
-			printToIndex(to, grep_color)
+			printToIndex(to, COLOR_GREP)
 
 			last     = to + 1
 			from, to = string_find(raw, grep, last, grep_raw)
@@ -299,7 +320,7 @@ do
 			table_insert(buffer, frag)
 		else
 			-- Push immediately
-			MsgC(currColor or baseColor or color_neutral, str)
+			MsgC(currColor or baseColor or COLOR_NEUTRAL, str)
 		end
 	end
 
@@ -318,7 +339,6 @@ end
 
 -- taken from gcompute
 local escapeTable = {}
-local multilineEscapeTable = {}
 for i = 0, 255 do
 	local c = string_char(i)
 
@@ -328,17 +348,11 @@ for i = 0, 255 do
 		escapeTable[c] = string_format("\\x%02x", i)
 	end
 end
-escapeTable["\\"] = "\\"
+escapeTable["\\"] = "\\\\"
 escapeTable["\t"] = "\\t"
 escapeTable["\r"] = "\\r"
 escapeTable["\n"] = "\\n"
 escapeTable["\""] = "\""
-
-for k, v in pairs(escapeTable) do
-	multilineEscapeTable[k] = v
-end
-multilineEscapeTable["\t"] = nil
-multilineEscapeTable["\n"] = "\\n"
 
 local characterPrintingBlacklist =
 {
@@ -503,26 +517,40 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 
 	-- 'nil' values can also be printed
 	if value == NIL then
-		gMsgC(type_colors[TYPE_NUMBER])
+		gMsgC(COLORS_TYPE[TYPE_NUMBER])
 		gMsgF("nil")
 		strOut[#strOut + 1] = "nil"
 
 		return table_concat(strOut, "")
 	end
 
-	local color = type_colors[TypeID(value)]
+	local color = COLORS_TYPE[TypeID(value)]
 
 	-- For strings, place quotes
 	if isstring(value) then
-		local escapedString = string_gsub(value, ".", multiline and multilineEscapeTable or escapeTable)
+		local escapedString = string_gsub(value, ".", escapeTable)
+		if limitedprint and #escapedString > 127 then
+			escapedString = escapedString:sub(1, 127) .. "\xe2\x80\xa6"
+		end
 		value = string_format("%q", escapedString)
 
-		gMsgC(color)
-		gMsgF(value)
-		strOut[#strOut + 1] = value
+		if syntaxParser then
+			for _, part in ipairs(syntaxParser.process(value)) do
+				if IsColor(part) then
+					gMsgC(part)
+				else
+					gMsgF(part)
+					strOut[#strOut + 1] = part
+				end
+			end
+		else
+			gMsgC(color)
+			gMsgF(value)
+			strOut[#strOut + 1] = value
+		end
 
 		if shouldComma then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(",")
 			strOut[#strOut + 1] = ","
 		end
@@ -544,36 +572,36 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		end
 
 		if next(value) then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("{ ")
 			strOut[#strOut + 1] = "{ "
 
-			gMsgC(color_comment)
+			gMsgC(COLOR_COMMENT)
 			gMsgF(string_format("--[[ %s: %p ]]", classname, value))
 			strOut[#strOut + 1] = string_format("--[[ %s: %p ]]", classname, value)
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(" }")
 			strOut[#strOut + 1] = " }"
 
 			if shouldComma then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(",")
 				strOut[#strOut + 1] = ","
 			end
 		else
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("{}")
 			strOut[#strOut + 1] = "{}"
 
 			if shouldComma then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(",")
 				strOut[#strOut + 1] = ","
 			end
 
 			if shouldComment then
-				gMsgC(color_comment)
+				gMsgC(COLOR_COMMENT)
 				gMsgF(string_format(" -- %s: %p", classname, value))
 				strOut[#strOut + 1] = string_format(" -- %s: %p", classname, value)
 			end
@@ -589,32 +617,32 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		tbl[2] = value.y
 		tbl[3] = value.z
 
-		gMsgC(color_global)
+		gMsgC(COLOR_GLOBAL)
 		gMsgF("Vector")
 		strOut[#strOut + 1] = "Vector"
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF("(")
 		strOut[#strOut + 1] = "("
 
 		for k, v in pairs(tbl) do
-			gMsgC(type_colors[TYPE_NUMBER])
+			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(v)
 			strOut[#strOut + 1] = v
 
 			if k ~= #tbl then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(", ")
 				strOut[#strOut + 1] = ", "
 			end
 		end
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(")")
 		strOut[#strOut + 1] = ")"
 
 		if shouldComma then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(",")
 			strOut[#strOut + 1] = ","
 		end
@@ -628,32 +656,32 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		tbl[2] = value.y
 		tbl[3] = value.z
 
-		gMsgC(color_global)
+		gMsgC(COLOR_GLOBAL)
 		gMsgF("Angle")
 		strOut[#strOut + 1] = "Angle"
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF("(")
 		strOut[#strOut + 1] = "("
 
 		for k, v in pairs(tbl) do
-			gMsgC(type_colors[TYPE_NUMBER])
+			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(v)
 			strOut[#strOut + 1] = v
 
 			if k ~= #tbl then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(", ")
 				strOut[#strOut + 1] = ", "
 			end
 		end
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(")")
 		strOut[#strOut + 1] = ")"
 
 		if shouldComma then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(",")
 			strOut[#strOut + 1] = ","
 		end
@@ -668,38 +696,38 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		tbl[3] = value.b
 		tbl[4] = value.a
 
-		gMsgC(color_global)
+		gMsgC(COLOR_GLOBAL)
 		gMsgF("Color")
 		strOut[#strOut + 1] = "Color"
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF("(")
 		strOut[#strOut + 1] = "("
 
 		for k, v in pairs(tbl) do
-			gMsgC(type_colors[TYPE_NUMBER])
+			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(v)
 			strOut[#strOut + 1] = v
 
 			if k ~= #tbl then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(", ")
 				strOut[#strOut + 1] = ", "
 			end
 		end
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(")")
 		strOut[#strOut + 1] = ")"
 
 		if shouldComma then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(",")
 			strOut[#strOut + 1] = ","
 		end
 
 		if shouldComment then
-			gMsgC(color_comment)
+			gMsgC(COLOR_COMMENT)
 			gMsgF(" -- ")
 
 			gMsgC(value)
@@ -713,111 +741,111 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 	-- Entities
 	if isentity(value) then
 		if not IsValid(value) and value ~= game.GetWorld() then
-			gMsgC(color_global)
+			gMsgC(COLOR_GLOBAL)
 			gMsgF("NULL")
 			strOut[#strOut + 1] = "NULL"
 			return table_concat(strOut, "")
 		elseif value == game.GetWorld() then
-			gMsgC(color_global)
+			gMsgC(COLOR_GLOBAL)
 			gMsgF("game.GetWorld")
 			strOut[#strOut + 1] = "game.GetWorld"
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("()")
 			strOut[#strOut + 1] = "()"
 
 			if shouldComma then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(",")
 				strOut[#strOut + 1] = ","
 			end
 
 			if shouldComment then
-				gMsgC(color_comment)
+				gMsgC(COLOR_COMMENT)
 				gMsgF(string_format(" -- %s, %s", value:GetClass(), value:GetModel()))
 				strOut[#strOut + 1] = string_format(" -- %s, %s", value:GetClass(), value:GetModel())
 			end
 
 			return table_concat(strOut, "")
 		elseif value:EntIndex() < 0 and value:GetModel() and value:GetModel() ~= "" then
-			gMsgC(color_global)
+			gMsgC(COLOR_GLOBAL)
 			gMsgF("ClientsideModel")
 			strOut[#strOut + 1] = "ClientsideModel"
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("(")
 			strOut[#strOut + 1] = "("
 
-			gMsgC(type_colors[TYPE_STRING])
+			gMsgC(COLORS_TYPE[TYPE_STRING])
 			gMsgF(string_format("%q", value:GetModel()))
 			strOut[#strOut + 1] = string_format("%q", value:GetModel())
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(")")
 			strOut[#strOut + 1] = ")"
 
 			if shouldComma then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(",")
 				strOut[#strOut + 1] = ","
 			end
 
 			return table_concat(strOut, "")
 		elseif value:IsPlayer() then
-			gMsgC(color_global)
+			gMsgC(COLOR_GLOBAL)
 			gMsgF("player.GetByID")
 			strOut[#strOut + 1] = "player.GetByID"
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("(")
 			strOut[#strOut + 1] = "("
 
-			gMsgC(type_colors[TYPE_NUMBER])
+			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(value:EntIndex())
 			strOut[#strOut + 1] = value:EntIndex()
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(")")
 			strOut[#strOut + 1] = ")"
 
 			if shouldComma then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(",")
 				strOut[#strOut + 1] = ","
 			end
 
 			if shouldComment then
-				gMsgC(color_comment)
+				gMsgC(COLOR_COMMENT)
 				gMsgF(string_format(" -- %s, %s", value:SteamID(), value:Name()))
 				strOut[#strOut + 1] = string_format(" -- %s, %s", value:SteamID(), value:Name())
 			end
 
 			return table_concat(strOut, "")
 		else
-			gMsgC(color_global)
+			gMsgC(COLOR_GLOBAL)
 			gMsgF("Entity")
 			strOut[#strOut + 1] = "Entity"
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("(")
 			strOut[#strOut + 1] = "("
 
-			gMsgC(type_colors[TYPE_NUMBER])
+			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(value:EntIndex())
 			strOut[#strOut + 1] = value:EntIndex()
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(")")
 			strOut[#strOut + 1] = ")"
 
 			if shouldComma then
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF(",")
 				strOut[#strOut + 1] = ","
 			end
 
 			if shouldComment then
-				gMsgC(color_comment)
+				gMsgC(COLOR_COMMENT)
 				gMsgF(string_format(" -- %s", value:GetClass()))
 				strOut[#strOut + 1] = string_format(" -- %s", value:GetClass())
 
@@ -846,7 +874,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		gMsgF("function")
 		strOut[#strOut + 1] = "function"
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF("(")
 		strOut[#strOut + 1] = "("
 
@@ -883,13 +911,13 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		strOut[#strOut + 1] = ")"
 
 		if shouldComma then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(",")
 			strOut[#strOut + 1] = ","
 		end
 
 		if shouldComment then
-			gMsgC(color_comment)
+			gMsgC(COLOR_COMMENT)
 			gMsgF(aux)
 			strOut[#strOut + 1] = aux
 		end
@@ -899,15 +927,15 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 
 	-- Panels
 	if ispanel(value) then
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF("{ ")
 		strOut[#strOut + 1] = "{"
 
-		gMsgC(color_global)
+		gMsgC(COLOR_GLOBAL)
 		gMsgF("Panel")
 		strOut[#strOut + 1] = "Panel"
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(": ")
 		strOut[#strOut + 1] = ": "
 
@@ -915,22 +943,22 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		if IsValid(value) then
 			class = value:GetClassName()
 		end
-		gMsgC(color_global)
+		gMsgC(COLOR_GLOBAL)
 		gMsgF(class)
 		strOut[#strOut + 1] = class
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(" }")
 		strOut[#strOut + 1] = " }"
 
 		if shouldComma then
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF(",")
 			strOut[#strOut + 1] = ","
 		end
 
 		if shouldComment and IsValid(value) then
-			gMsgC(color_comment)
+			gMsgC(COLOR_COMMENT)
 			gMsgF(string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible",
 				#value:GetChildren() > 0 and
 				string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or ""))
@@ -956,7 +984,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 	strOut[#strOut + 1] = tostring(value)
 
 	if shouldComma then
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(",")
 		strOut[#strOut + 1] = ","
 	end
@@ -966,8 +994,6 @@ end
 
 
 -- Associated to object keys
-local objID
-
 local function isprimitive(value)
 	local id = TypeID(value)
 
@@ -1010,7 +1036,7 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 
 	-- Exit early for empty tables
 	if keyCount == 0 then
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF("{}")
 		if not recursive then
 			gMsgN()
@@ -1028,7 +1054,7 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 
 	for key, str in pairs(keyStr) do
 		str = IsValidVariableName(str) and str or
-		"[" .. (shouldPrintKey[key] and str or (isnumber(tonumber(str)) and str or string_format("%q", str))) .. "]"
+				"[" .. (shouldPrintKey[key] and str or (isnumber(tonumber(str)) and str or string_format("%q", str))) .. "]"
 
 		keyLen = math_max(keyLen, string_len(str))
 	end
@@ -1050,17 +1076,17 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 	todo[table] = nil
 
 	if not recursive and IsColor(table) then
-		gMsgC(color_comment)
+		gMsgC(COLOR_COMMENT)
 		gMsgF("-- Color: ")
-		gMsgC(value)
+		gMsgC(table)
 		gMsgF("█")
 		gMsgN()
 	end
 
-	gMsgC(color_neutral)
+	gMsgC(COLOR_NEUTRAL)
 	gMsgF("{")
 	gMsgN()
-	gMsgC(Color(255, 255, 255))
+	gMsgC(COLOR_WHITE)
 
 	local maxKeyIndex = -1
 	if limitedprint then
@@ -1089,27 +1115,27 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 
 		if not shouldPrintKey[key] then
 			if IsValidVariableName(sKey) then
-				gMsgC(color_name)
+				gMsgC(COLOR_NAME)
 				gMsgF(sKey)
 			else
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF("[")
 
-				gMsgC(isnumber(tonumber(sKey)) and type_colors[TYPE_NUMBER] or type_colors[TYPE_STRING])
+				gMsgC(isnumber(tonumber(sKey)) and COLORS_TYPE[TYPE_NUMBER] or COLORS_TYPE[TYPE_STRING])
 				gMsgF(isnumber(tonumber(sKey)) and sKey or string_format("%q", sKey))
 
-				gMsgC(color_neutral)
+				gMsgC(COLOR_NEUTRAL)
 				gMsgF("]")
 
 				sKey = "[" .. (isnumber(tonumber(sKey)) and sKey or string_format("%q", sKey)) .. "]"
 			end
 		else
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("[")
 
 			local str = InternalPrintValue(key, false, false)
 
-			gMsgC(color_neutral)
+			gMsgC(COLOR_NEUTRAL)
 			gMsgF("]")
 
 			sKey = "[" .. str .. "]"
@@ -1122,12 +1148,12 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 		local padding = keyLen - string_len(sKey)
 		local postfix = string_format("%s = ", string_rep(' ', padding))
 
-		gMsgC(color_neutral)
+		gMsgC(COLOR_NEUTRAL)
 		gMsgF(postfix)
 
 		-- Print the value (or the reference name)
 		if vName and not todo[value] then
-			gMsgC(color_global)
+			gMsgC(COLOR_GLOBAL)
 			gMsgF(vName)
 		else
 			if istable(value) then
@@ -1151,26 +1177,26 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 		end
 
 		gMsgN()
-		gMsgC(Color(255, 255, 255))
+		gMsgC(COLOR_WHITE)
 	end
 
 	if not recursive then
 		if maxKeyIndex > -1 and keyCount > maxKeyIndex then
-			gMsgC(color_comment)
+			gMsgC(COLOR_COMMENT)
 			gMsgF(string_format(prefix .. "  -- %s more...", keyCount - maxKeyIndex))
 			gMsgN()
 		end
 	end
 
 	gMsgF(prefix)
-	gMsgC(color_neutral)
+	gMsgC(COLOR_NEUTRAL)
 	gMsgF("}")
 	if not recursive then
 		gMsgN()
 	end
 
 	if not recursive then
-		gMsgC(color_comment)
+		gMsgC(COLOR_COMMENT)
 		gMsgF(string_format("-- %d total entr%s.", keyCount, keyCount == 1 and "y" or "ies"))
 		gMsgN()
 	end
@@ -1183,14 +1209,13 @@ function PrintTableGrep(table, grep, proximity)
 	}
 
 	gBegin(grep, proximity)
-	objID = 0
 	InternalPrintTable(table, nil, "", base, {})
 	gFinish()
 end
 
 function PrintLocals(level)
-	local level = level or 2
-	local hash  = {}
+	level      = level or 2
+	local hash = {}
 
 	for index = 1, 255 do
 		local name, value = debug_getlocal(2, index)
@@ -1225,7 +1250,7 @@ function show(...)
 
 		local addr = string_format("%p", value)
 		if addr ~= "NULL" and not isstring(value) then
-			gMsgC(color_comment)
+			gMsgC(COLOR_COMMENT)
 			gMsgF("-- " .. addr)
 			gMsgN()
 		end
@@ -1248,7 +1273,7 @@ function show(...)
 					end
 
 					if name then
-						gMsgC(color_comment)
+						gMsgC(COLOR_COMMENT)
 						gMsgF("-- " .. name)
 						gMsgN()
 					end
@@ -1262,42 +1287,42 @@ function show(...)
 				gMsgN()
 			else
 				if value:IsPlayer() then
-					gMsgC(color_comment)
+					gMsgC(COLOR_COMMENT)
 					gMsgF("-- " .. value:Name())
 					gMsgN()
 
-					gMsgC(color_comment)
+					gMsgC(COLOR_COMMENT)
 					gMsgF("-- " .. value:SteamID())
 					gMsgN()
 				end
 
-				gMsgC(color_comment)
+				gMsgC(COLOR_COMMENT)
 				gMsgF("-- " .. value:GetClass())
 				gMsgN()
 
 				if value:GetModel() then
-					gMsgC(color_comment)
+					gMsgC(COLOR_COMMENT)
 					gMsgF("-- " .. value:GetModel())
 					gMsgN()
 				end
 
 				if value == game.GetWorld() then
-					gMsgC(type_colors[TYPE_FUNCTION])
+					gMsgC(COLORS_TYPE[TYPE_FUNCTION])
 					gMsgF("game.GetWorld")
 
-					gMsgC(color_neutral)
+					gMsgC(COLOR_NEUTRAL)
 					gMsgF("()")
 				else
-					gMsgC(color_global)
+					gMsgC(COLOR_GLOBAL)
 					gMsgF("Entity")
 
-					gMsgC(color_neutral)
+					gMsgC(COLOR_NEUTRAL)
 					gMsgF("(")
 
-					gMsgC(type_colors[TYPE_NUMBER])
+					gMsgC(COLORS_TYPE[TYPE_NUMBER])
 					gMsgF(value:EntIndex())
 
-					gMsgC(color_neutral)
+					gMsgC(COLOR_NEUTRAL)
 					gMsgF(")")
 				end
 
@@ -1306,7 +1331,7 @@ function show(...)
 				PrintTableGrep(value:GetTable())
 
 				if #value:GetChildren() > 0 and not value:IsPlayer() then
-					gMsgC(color_comment)
+					gMsgC(COLOR_COMMENT)
 					gMsgF("-- Children:")
 					gMsgN()
 					PrintTableGrep(value:GetChildren())
@@ -1320,7 +1345,7 @@ function show(...)
 				PrintTableGrep(value:GetTable())
 
 				if #value:GetChildren() > 0 then
-					gMsgC(color_comment)
+					gMsgC(COLOR_COMMENT)
 					gMsgF("-- Children:")
 					gMsgN()
 					PrintTableGrep(value:GetChildren())
@@ -1357,7 +1382,7 @@ function show(...)
 					if not code then
 						local ok, out = pcall(function() return GLib.Lua.BytecodeReader(value):ToString() end)
 						if not ok then
-							gMsgC(color_comment)
+							gMsgC(COLOR_COMMENT)
 							gMsgF(string_format("-- Failed to decompile: %s", out))
 							gMsgN()
 							code = ""
@@ -1368,16 +1393,16 @@ function show(...)
 
 					local info = f.InfoTable
 					if info.linedefined ~= info.lastlinedefined then
-						gMsgC(color_comment)
+						gMsgC(COLOR_COMMENT)
 						gMsgF(string_format("-- %s: %i-%i", info.short_src, info.linedefined, info.lastlinedefined))
 					else
-						gMsgC(color_comment)
+						gMsgC(COLOR_COMMENT)
 						gMsgF(string_format("-- %s: %i", info.short_src, info.linedefined))
 					end
 					gMsgN()
 
 					local formatted = syntaxParser.process(code)
-					for k, v in pairs(formatted) do
+					for _, v in pairs(formatted) do
 						if IsColor(v) then
 							gMsgC(v)
 						else
@@ -1394,24 +1419,24 @@ function show(...)
 		elseif isstring(value) then
 			if GLib and ContainsSequences(value) then
 				local codePointCount = UTF8_Length(value)
-				gMsgC(color_comment)
+				gMsgC(COLOR_COMMENT)
 				gMsgF("-- " .. tostring(codePointCount) .. " code point" .. (codePointCount == 1 and "" or "s"))
 				gMsgN()
 
 				local j = 0
 				for c in UTF8_Iterator(value) do
 					if j >= 5 then
-						gMsgC(color_comment)
+						gMsgC(COLOR_COMMENT)
 						gMsgF("-- ...")
 						gMsgN()
 						break
 					end
 					j = j + 1
 
-					gMsgC(color_comment)
+					gMsgC(COLOR_COMMENT)
 					gMsgF("-- " ..
-					string_format("U+%06X ", UTF8_Byte(c)) ..
-					(not characterPrintingBlacklist[c] and c or " ") .. " " .. GLib.Unicode.GetCharacterName(c))
+						string_format("U+%06X ", UTF8_Byte(c)) ..
+						(not characterPrintingBlacklist[c] and c or " ") .. " " .. GLib.Unicode.GetCharacterName(c))
 					gMsgN()
 				end
 			end
