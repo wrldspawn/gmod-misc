@@ -65,6 +65,7 @@ local SNIPER = {
 }
 
 hook.Add("OnEntityCreated", "swcs_hl2", function(ent)
+    if not swcs then return end
     if not IsValid(ent) then return end
 
     timer.Simple(0, function()
@@ -146,6 +147,7 @@ local STOCK = {
     weapon_crossbow = true,
 }
 hook.Add("PlayerCanPickupWeapon", "swcs_hl2", function(ply, wep)
+    if not swcs then return end
     local class = wep:GetClass()
     if STOCK[class] then return false end
     if class == "weapon_frag" then
