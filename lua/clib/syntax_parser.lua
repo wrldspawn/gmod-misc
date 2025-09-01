@@ -322,7 +322,9 @@ registerParser("[%a_][%w_]*", function(parseData, text, id, match)
 	elseif match == "end" then
 		if parseData.scopeCount == nil or parseData.scopeCount == 0 then
 			targetColor = FUNCTION
-			parseData.functionCount = parseData.functionCount - 1
+			if parseData.functionCount ~= nil then
+				parseData.functionCount = parseData.functionCount - 1
+			end
 			if parseData.prevScopeCount ~= nil then
 				parseData.scopeCount = parseData.prevScopeCount
 			end
