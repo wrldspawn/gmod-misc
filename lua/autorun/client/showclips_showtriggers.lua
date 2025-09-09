@@ -104,22 +104,27 @@ local function collectClipBrushes()
 	for _, brush in ipairs(MAP:GetBrushes()) do
 		local invis = true
 		local sky = false
+		local nodraw = true
 		for i = 1, brush.numsides do
 			local tex = brush:GetTexture(i):lower()
 			if tex ~= "tools/toolsinvisible" then
 				invis = false
 			end
-			if tex == "tools/toolsskybox" then
+			if tex ~= "tools/toolsnodraw" then
+				nodraw = false
+			end
+			if tex == "tools/toolsskybox" or tex == "tools/toolsskybox2d" then
 				sky = true
 			end
 		end
 
-		if invis == false and sky == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
+		if invis == false and sky == false and nodraw == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
 
 		if sky then
 			local skySides = {}
 			for i = 1, brush.numsides do
-				if brush:GetTexture(i):lower() == "tools/toolsskybox" then
+				local tex = brush:GetTexture(i):lower()
+				if tex == "tools/toolsskybox" or tex == "tools/toolsskybox2d" then
 					skySides[i] = true
 				end
 			end
@@ -128,6 +133,7 @@ local function collectClipBrushes()
 
 		brush.invis = invis
 		brush.sky = sky
+		brush.nodraw = nodraw
 		brushes[#brushes + 1] = brush
 	end
 
@@ -179,6 +185,7 @@ local function collectClipBrushes()
 		brush_verts.contents = brush:GetContents()
 		brush_verts.invis = brush.invis
 		brush_verts.sky = brush.sky
+		brush_verts.nodraw = brush.nodraw
 		brush_verts.skySides = brush.skySides
 
 		clipBrushes[#clipBrushes + 1] = brush_verts
@@ -342,6 +349,20 @@ local function generateClipMeshes()
 		local r = 231
 		local g = 16
 		local b = 148
+		if brush.invis then
+			r = 255
+			g = 255
+			b = 255
+		elseif brush.nodraw then
+			r = 251
+			g = 218
+			b = 36
+		elseif brush.sky then
+			r = 178
+			g = 225
+			b = 255
+		end
+
 		if bit.band(contents, CONTENTS_MONSTERCLIP) ~= 0 then
 			if bit.band(contents, CONTENTS_PLAYERCLIP) == 0 then
 				r = 140
@@ -352,15 +373,10 @@ local function generateClipMeshes()
 				g = 57
 				b = 32
 			end
-		end
-		if brush.invis then
-			r = 255
-			g = 255
-			b = 255
-		elseif brush.sky then
-			r = 178
-			g = 225
-			b = 255
+		elseif bit.band(contents, CONTENTS_PLAYERCLIP) ~= 0 then
+			r = 231
+			g = 16
+			b = 148
 		end
 
 		-- face
