@@ -532,7 +532,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		if limitedprint and #escapedString > 127 then
 			escapedString = escapedString:sub(1, 127) .. "\xe2\x80\xa6"
 		end
-		value = string_format("%q", escapedString)
+		value = string_format('"%s"', escapedString)
 
 		if syntaxParser then
 			for _, part in ipairs(syntaxParser.process(value)) do
@@ -1054,7 +1054,7 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 
 	for key, str in pairs(keyStr) do
 		str = IsValidVariableName(str) and str or
-				"[" .. (shouldPrintKey[key] and str or (isnumber(tonumber(str)) and str or string_format("%q", str))) .. "]"
+				"[" .. (shouldPrintKey[key] and str or (isnumber(tonumber(str)) and str or string_format('"%s"', str))) .. "]"
 
 		keyLen = math_max(keyLen, string_len(str))
 	end
