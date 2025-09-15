@@ -46,7 +46,11 @@ if SERVER then
 
 	hook.Add("PlayerInitialSpawn", TAG, function(ply)
 		if not ply:IsBot() then
-			connecttimes[ply:UserID()].spawned = SysTime()
+			local uid = ply:UserID()
+			if not connecttimes[uid] then
+				connecttimes[uid] = {}
+			end
+			connecttimes[uid].spawned = SysTime()
 		end
 
 		net.Start(TAG)
@@ -63,7 +67,7 @@ if SERVER then
 		if not times then return end
 		local now = SysTime()
 
-		local spawnDelta = math.ceil(times.spawned - times.connect)
+		local spawnDelta = math.ceil(times.spawned - (times.connect or times.spawned))
 		local netDelta = math.ceil(now - times.spawned)
 
 		MsgN(data.name .. " connected in " .. spawnDelta .. "s (spawned in " .. netDelta .. "s)")
