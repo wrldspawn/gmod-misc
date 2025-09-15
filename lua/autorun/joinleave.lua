@@ -67,6 +67,8 @@ if SERVER then
 		local netDelta = math.ceil(now - times.spawned)
 
 		MsgN(data.name .. " connected in " .. spawnDelta .. "s (spawned in " .. netDelta .. "s)")
+
+		connecttimes[data.userid] = nil
 	end)
 
 	hook.Add("PlayerChangedTeam", TAG, function(ply)
