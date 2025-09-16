@@ -81,6 +81,15 @@ if SERVER then
 		net.WritePlayer(ply)
 		net.Broadcast()
 	end)
+
+	hook.Add("ClientSignOnStateChanged", TAG, function(uid, old, new)
+		if old == SIGNONSTATE_CHANGELEVEL then
+			if not connecttimes[uid] then
+				connecttimes[uid] = {}
+			end
+			connecttimes[uid].connect = SysTime()
+		end
+	end)
 elseif CLIENT then
 	local COLOR_PREFIX = Color(128, 128, 255)
 	local COLOR_WHITE = Color(255, 255, 255)
