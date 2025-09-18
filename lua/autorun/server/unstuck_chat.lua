@@ -1,14 +1,18 @@
-local PLAYER = FindMetaTable("Player")
-local hasUnstuck = PLAYER.IsStuck ~= nil and PLAYER.UnStuck ~= nil
-local checked = false
+local Unstuck = util.UnstuckPlayer
+local IsStuck
 
 hook.Add("PlayerSay", "unstuck", function(ply, str)
-	if not hasUnstuck and not checked then
-		hasUnstuck = PLAYER.IsStuck ~= nil and PLAYER.UnStuck ~= nil
-		checked = true
+	if Unstuck == nil then
+		return
+	elseif IsStuck == nil then
+		IsStuck = select(2, debug.getupvalue(Unstuck, 1))
 	end
 
-	if str:find("stuck") and hasUnstuck and ply:IsStuck() then
-		ply:UnStuck()
+	if str:find("stuck") and IsStuck and IsStuck(ply) then
+		Unstuck(ply)
+	end
+
+	if str:find("^[!/%.]stuck") then
+		return ""
 	end
 end)

@@ -163,8 +163,6 @@ if eval then
 	local func = prettyprint.show
 	if CLIENT then
 		func = function(...) PrettyPrintOnServer(toEval, ...) end
-	else
-		func = prettyprint.show
 	end
 	prettyprint.StartLimit()
 	func(eval())
