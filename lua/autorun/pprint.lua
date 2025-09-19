@@ -339,7 +339,7 @@ local sv_allowcslua = GetConVar "sv_allowcslua"
 add("self", function(ply, line)
 	if not line then return end
 
-	local script = ply:IsAdmin() and pprint(line, "pprintm") or pprint_self(line, "pprintm")
+	local script = ply:IsAdmin() and pprint(line, "pprintm", ply) or pprint_self(line, "pprintm")
 
 	if luadev.ValidScript then
 		local valid, err = luadev.ValidScript(script, "pprintm")
