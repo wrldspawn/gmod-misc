@@ -340,7 +340,7 @@ local function find_ent(inp)
 			return ent
 		end
 
-		if ent.GetName and IsSimilar(inp, ent:GetName()) then
+		if ent.GetName and strsim(inp, ent:GetName()) then
 			return ent
 		end
 	end
@@ -368,6 +368,7 @@ local function mu_env(p)
 		us = mu(ents.FindInSphere(p:GetPos(), 256)):filter("e->e:IsPlayer()"),
 		all = mu.p(),
 		allof = mu.e.c,
+		named = mu.e.n,
 	}
 	if SERVER then
 		tbl.these = mu(constraint.GetAllConstrainedEntities(tr.Entity))
@@ -389,4 +390,3 @@ local function mu_env(p)
 end
 
 _G._mu_env = mu_env
-

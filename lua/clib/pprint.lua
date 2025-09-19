@@ -352,7 +352,7 @@ escapeTable["\\"] = "\\\\"
 escapeTable["\t"] = "\\t"
 escapeTable["\r"] = "\\r"
 escapeTable["\n"] = "\\n"
-escapeTable["\""] = "\""
+escapeTable["\""] = "\\\""
 
 local characterPrintingBlacklist =
 {
@@ -612,10 +612,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 
 	-- Vectors/Angles/Colors
 	if isvector(value) then
-		local tbl = {}
-		tbl[1] = value.x
-		tbl[2] = value.y
-		tbl[3] = value.z
+		local tbl = value:ToTable()
 
 		gMsgC(COLOR_GLOBAL)
 		gMsgF("Vector")
@@ -651,10 +648,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 	end
 
 	if isangle(value) then
-		local tbl = {}
-		tbl[1] = value.x
-		tbl[2] = value.y
-		tbl[3] = value.z
+		local tbl = value:ToTable()
 
 		gMsgC(COLOR_GLOBAL)
 		gMsgF("Angle")
@@ -664,7 +658,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		gMsgF("(")
 		strOut[#strOut + 1] = "("
 
-		for k, v in pairs(tbl) do
+		for k, v in ipairs(tbl) do
 			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(v)
 			strOut[#strOut + 1] = v
@@ -690,11 +684,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 	end
 
 	if IsColor(value) then
-		local tbl = {}
-		tbl[1] = value.r
-		tbl[2] = value.g
-		tbl[3] = value.b
-		tbl[4] = value.a
+		local tbl = value:ToTable()
 
 		gMsgC(COLOR_GLOBAL)
 		gMsgF("Color")
@@ -704,7 +694,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		gMsgF("(")
 		strOut[#strOut + 1] = "("
 
-		for k, v in pairs(tbl) do
+		for k, v in ipairs(tbl) do
 			gMsgC(COLORS_TYPE[TYPE_NUMBER])
 			gMsgF(v)
 			strOut[#strOut + 1] = v
@@ -761,9 +751,10 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 			end
 
 			if shouldComment then
+				local comment = string_format(" -- %s, %s", value:GetClass(), value:GetModel())
 				gMsgC(COLOR_COMMENT)
-				gMsgF(string_format(" -- %s, %s", value:GetClass(), value:GetModel()))
-				strOut[#strOut + 1] = string_format(" -- %s, %s", value:GetClass(), value:GetModel())
+				gMsgF(comment)
+				strOut[#strOut + 1] = comment
 			end
 
 			return table_concat(strOut, "")
@@ -777,8 +768,9 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 			strOut[#strOut + 1] = "("
 
 			gMsgC(COLORS_TYPE[TYPE_STRING])
-			gMsgF(string_format("%q", value:GetModel()))
-			strOut[#strOut + 1] = string_format("%q", value:GetModel())
+			local model = string_format("%q", value:GetModel())
+			gMsgF(model)
+			strOut[#strOut + 1] = model
 
 			gMsgC(COLOR_NEUTRAL)
 			gMsgF(")")
@@ -793,16 +785,17 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 			return table_concat(strOut, "")
 		elseif value:IsPlayer() then
 			gMsgC(COLOR_GLOBAL)
-			gMsgF("player.GetByID")
-			strOut[#strOut + 1] = "player.GetByID"
+			gMsgF("Player")
+			strOut[#strOut + 1] = "Player"
 
 			gMsgC(COLOR_NEUTRAL)
 			gMsgF("(")
 			strOut[#strOut + 1] = "("
 
+			local idx = value:UserID()
 			gMsgC(COLORS_TYPE[TYPE_NUMBER])
-			gMsgF(value:EntIndex())
-			strOut[#strOut + 1] = value:EntIndex()
+			gMsgF(idx)
+			strOut[#strOut + 1] = idx
 
 			gMsgC(COLOR_NEUTRAL)
 			gMsgF(")")
@@ -815,9 +808,10 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 			end
 
 			if shouldComment then
+				local comment = string_format(" -- %s, %q", value:SteamID(), value:Name())
 				gMsgC(COLOR_COMMENT)
-				gMsgF(string_format(" -- %s, %s", value:SteamID(), value:Name()))
-				strOut[#strOut + 1] = string_format(" -- %s, %s", value:SteamID(), value:Name())
+				gMsgF(comment)
+				strOut[#strOut + 1] = comment
 			end
 
 			return table_concat(strOut, "")
@@ -830,9 +824,10 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 			gMsgF("(")
 			strOut[#strOut + 1] = "("
 
+			local idx = value:EntIndex()
 			gMsgC(COLORS_TYPE[TYPE_NUMBER])
-			gMsgF(value:EntIndex())
-			strOut[#strOut + 1] = value:EntIndex()
+			gMsgF(idx)
+			strOut[#strOut + 1] = idx
 
 			gMsgC(COLOR_NEUTRAL)
 			gMsgF(")")
@@ -845,19 +840,30 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 			end
 
 			if shouldComment then
+				local class = string_format(" -- %s", value:GetClass())
 				gMsgC(COLOR_COMMENT)
-				gMsgF(string_format(" -- %s", value:GetClass()))
-				strOut[#strOut + 1] = string_format(" -- %s", value:GetClass())
+				gMsgF(class)
+				strOut[#strOut + 1] = class
 
-				if value:GetModel() then
-					gMsgF(string_format(", %s", value:GetModel()))
-					strOut[#strOut + 1] = string_format(", %s", value:GetModel())
+				local model = value:GetModel()
+				if model and model ~= "" then
+					local modelstr = string_format(", %s", model)
+					gMsgF(modelstr)
+					strOut[#strOut + 1] = modelstr
 				end
 
-				if #value:GetChildren() > 0 then
-					gMsgF(string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()))
-					strOut[#strOut + 1] = string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""),
-						#value:GetChildren())
+				local name = value:GetName()
+				if name and name ~= "" then
+					local namestr = string_format(", %q", name)
+					gMsgF(namestr)
+					strOut[#strOut + 1] = namestr
+				end
+
+				local children = #value:GetChildren()
+				if children > 0 then
+					local childstr = string_format(", %d child" .. (children ~= 1 and "ren" or ""), children)
+					gMsgF(childstr)
+					strOut[#strOut + 1] = childstr
 				end
 			end
 
@@ -958,13 +964,13 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		end
 
 		if shouldComment and IsValid(value) then
+			local children = #value:GetChildren()
+			local comment = string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible",
+				children > 0 and
+				string_format(", %d child" .. (children ~= 1 and "ren" or ""), children) or "")
 			gMsgC(COLOR_COMMENT)
-			gMsgF(string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible",
-				#value:GetChildren() > 0 and
-				string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or ""))
-			strOut[#strOut + 1] = string_format(" -- %s%s", value:IsVisible() and "Visible" or "Invisible",
-				#value:GetChildren() > 0 and
-				string_format(", %d child" .. (#value:GetChildren() ~= 1 and "ren" or ""), #value:GetChildren()) or "")
+			gMsgF(comment)
+			strOut[#strOut + 1] = comment
 		end
 		return table_concat(strOut, "")
 	end
@@ -1163,7 +1169,7 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 					else
 						local base = {
 							[_G]    = "_G",
-							[table] = "root",
+							[table] = "self",
 							[value] = "subroot"
 						}
 						InternalPrintTable(value, nil, prefix .. "  ", base, {}, true)
@@ -1205,7 +1211,7 @@ end
 function PrintTableGrep(table, grep, proximity)
 	local base = {
 		[_G]    = "_G",
-		[table] = "root"
+		[table] = "self"
 	}
 
 	gBegin(grep, proximity)
@@ -1286,7 +1292,8 @@ function show(...)
 				InternalPrintValue(value, true, false)
 				gMsgN()
 			else
-				if value:IsPlayer() then
+				local isPlayer = value:IsPlayer()
+				if isPlayer then
 					gMsgC(COLOR_COMMENT)
 					gMsgF("-- " .. value:Name())
 					gMsgN()
@@ -1300,9 +1307,17 @@ function show(...)
 				gMsgF("-- " .. value:GetClass())
 				gMsgN()
 
-				if value:GetModel() then
+				local model = value:GetModel()
+				if model and model ~= "" then
 					gMsgC(COLOR_COMMENT)
-					gMsgF("-- " .. value:GetModel())
+					gMsgF("-- " .. model)
+					gMsgN()
+				end
+
+				local name = value:GetName()
+				if name and name ~= "" and not isPlayer then
+					gMsgC(COLOR_COMMENT)
+					gMsgF(string_format("-- %q", name))
 					gMsgN()
 				end
 
@@ -1312,6 +1327,21 @@ function show(...)
 
 					gMsgC(COLOR_NEUTRAL)
 					gMsgF("()")
+				elseif isPlayer then
+					gMsgC(COLOR_GLOBAL)
+					gMsgF("Player")
+
+					gMsgC(COLOR_NEUTRAL)
+					gMsgF("(")
+
+					gMsgC(COLORS_TYPE[TYPE_NUMBER])
+					gMsgF(value:UserID())
+
+					gMsgC(COLOR_NEUTRAL)
+					gMsgF(")")
+
+					gMsgC(COLOR_COMMENT)
+					gMsgF(string_format(" -- Entity(%d)", value:EntIndex()))
 				else
 					gMsgC(COLOR_GLOBAL)
 					gMsgF("Entity")
@@ -1330,11 +1360,12 @@ function show(...)
 
 				PrintTableGrep(value:GetTable())
 
-				if #value:GetChildren() > 0 and not value:IsPlayer() then
+				local children = value:GetChildren()
+				if #children > 0 and not isPlayer then
 					gMsgC(COLOR_COMMENT)
 					gMsgF("-- Children:")
 					gMsgN()
-					PrintTableGrep(value:GetChildren())
+					PrintTableGrep(children)
 				end
 			end
 		elseif ispanel(value) then
@@ -1344,11 +1375,12 @@ function show(...)
 			else
 				PrintTableGrep(value:GetTable())
 
-				if #value:GetChildren() > 0 then
+				local children = value:GetChildren()
+				if #children > 0 then
 					gMsgC(COLOR_COMMENT)
 					gMsgF("-- Children:")
 					gMsgN()
-					PrintTableGrep(value:GetChildren())
+					PrintTableGrep(children)
 				end
 			end
 		elseif isfunction(value) then

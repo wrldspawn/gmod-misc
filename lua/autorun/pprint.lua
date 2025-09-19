@@ -1,3 +1,5 @@
+if not luadev then return end
+
 include("clib/pprint.lua")
 include("clib/syntax_parser.lua")
 
@@ -100,7 +102,9 @@ end)
 local function add(cmd, callback)
 	concommand.Add("pprint_" .. cmd, function(ply, _, _, argStr)
 		local a, b
-		easylua.End()
+		if easylua then
+			easylua.End()
+		end
 		local ret, why = callback(ply, argStr)
 
 		if not ret then
@@ -112,7 +116,9 @@ local function add(cmd, callback)
 			end
 		end
 
-		easylua.Start(ply)
+		if easylua then
+			easylua.Start(ply)
+		end
 
 		return a, b
 	end)
@@ -122,12 +128,13 @@ local function X(ply, i)
 	return luadev.GetPlayerIdentifier(ply, "cmd:" .. i)
 end
 
-local function pprint(line, id)
+local function pprint(line, id, ply)
 	line = line:gsub("\n", " ")
 	id = id or "pprint_eval"
 
 	local script = string.format([[local toEval = %q
 local id = %q
+local eidx = %q
 
 local function compile(code, id)
 	local fullCode = "return function() " .. code .. "\nend"
@@ -158,7 +165,11 @@ if not eval then
 end
 
 if eval then
-	setfenv(eval, easylua.EnvMeta)
+	if _mu_env then
+		setfenv(eval, _mu_env(Entity(eidx)))
+	elseif easylua then
+		setfenv(eval, easylua.EnvMeta)
+	end
 
 	local func = prettyprint.show
 	if CLIENT then
@@ -167,7 +178,7 @@ if eval then
 	prettyprint.StartLimit()
 	func(eval())
 	prettyprint.EndLimit()
-end]], line, id)
+end]], line, id, ply:EntIndex())
 
 	return script:gsub("    ", ""):gsub("\t", ""):gsub("\n", " ")
 end
@@ -208,7 +219,12 @@ if not eval then
 end
 
 if eval then
-	setfenv(eval, easylua.EnvMeta)
+	if _mu_env then
+		setfenv(eval, _mu_env(LocalPlayer()))
+	elseif easylua then
+		setfenv(eval, easylua.EnvMeta)
+	end
+
 	prettyprint.StartPrintTable()
 	prettyprint.show(eval())
 	prettyprint.EndPrintTable()
@@ -223,8 +239,10 @@ add("sv", function(ply, line)
 		return false, "invalid script"
 	end
 
+	local script = pprint(line, "pprint", ply)
+
 	if luadev.ValidScript then
-		local valid, err = luadev.ValidScript(pprint(line, "pprint"), "pprint")
+		local valid, err = luadev.ValidScript(script, "pprint")
 
 		if not valid then
 			return false, err
@@ -234,7 +252,7 @@ add("sv", function(ply, line)
 	tagline(ply:Name(), "Server")
 	showLine(line)
 
-	return luadev.RunOnServer(pprint(line, "pprint"), X(ply, "pprint"), {
+	return luadev.RunOnServer(script, X(ply, "pprint"), {
 		ply = ply
 	})
 end)
@@ -245,8 +263,10 @@ add("sh", function(ply, line)
 		return false, "invalid script"
 	end
 
+	local script = pprint(line, "pprints", ply)
+
 	if luadev.ValidScript then
-		local valid, err = luadev.ValidScript(pprint(line, "pprints"), "pprints")
+		local valid, err = luadev.ValidScript(script, "pprints")
 
 		if not valid then
 			return false, err
@@ -258,7 +278,7 @@ add("sh", function(ply, line)
 	tagline1("Server")
 	showLine(line)
 
-	return luadev.RunOnShared(pprint(line, "pprints"), X(ply, "pprints"), {
+	return luadev.RunOnShared(script, X(ply, "pprints"), {
 		ply = ply
 	})
 end)
@@ -267,8 +287,10 @@ add("clients", function(ply, line)
 	if not ply:IsAdmin() then return end
 	if not line then return end
 
+	local script = pprint(line, "pprintc", ply)
+
 	if luadev.ValidScript then
-		local valid, err = luadev.ValidScript(pprint(line, "pprintc"), "pprintc")
+		local valid, err = luadev.ValidScript(script, "pprintc")
 
 		if not valid then
 			return false, err
@@ -278,7 +300,7 @@ add("clients", function(ply, line)
 	tagline(ply:Name(), "Clients")
 	showLine(line)
 
-	return luadev.RunOnClients(pprint(line, "pprintc"), X(ply, "pprintc"), {
+	return luadev.RunOnClients(script, X(ply, "pprintc"), {
 		ply = ply
 	})
 end)
@@ -339,19 +361,21 @@ end)
 add("cl", function(ply, line)
 	if not line then return end
 
+	if not sv_allowcslua:GetBool() then
+		return false, "sv_allowcslua is 0"
+	end
+
+	local script = pprint_self(line, "pprintm")
+
 	if luadev.ValidScript then
-		local valid, err = luadev.ValidScript(pprint_self(line, "pprintm"), "pprintm")
+		local valid, err = luadev.ValidScript(script, "pprintm")
 
 		if not valid then
 			return false, err
 		end
 	end
 
-	if not sv_allowcslua:GetBool() then
-		return false, "sv_allowcslua is 0"
-	end
-
-	luadev.RunOnClient(pprint_self(line, "pprintm"), ply, X(ply, "pprintm"), {
+	luadev.RunOnClient(script, ply, X(ply, "pprintm"), {
 		ply = ply
 	})
 end)
@@ -360,8 +384,10 @@ add("both", function(ply, line)
 	if not ply:IsAdmin() then return end
 	if not line then return end
 
+	local script = pprint(line, "pprintb", ply)
+
 	if luadev.ValidScript then
-		local valid, err = luadev.ValidScript(pprint(line, "pprintb"), "pprintb")
+		local valid, err = luadev.ValidScript(script, "pprintb")
 
 		if not valid then
 			return false, err
@@ -371,14 +397,14 @@ add("both", function(ply, line)
 	tagline(ply:Name(), "Both")
 	MsgN("")
 
-	luadev.RunOnClient(pprint(line, "pprintb"), ply, X(ply, "pprintb"), {
+	luadev.RunOnClient(script, ply, X(ply, "pprintb"), {
 		ply = ply
 	})
 
 	tagline1("Server")
 	showLine(line)
 
-	return luadev.RunOnServer(pprint(line, "pprintb"), X(ply, "pprintb"), {
+	return luadev.RunOnServer(script, X(ply, "pprintb"), {
 		ply = ply
 	})
 end)
