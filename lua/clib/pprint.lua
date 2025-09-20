@@ -852,7 +852,7 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 					strOut[#strOut + 1] = modelstr
 				end
 
-				local name = value:GetName()
+				local name = value.GetName and value:GetName()
 				if name and name ~= "" then
 					local namestr = string_format(", %q", name)
 					gMsgF(namestr)
@@ -1314,7 +1314,7 @@ function show(...)
 					gMsgN()
 				end
 
-				local name = value:GetName()
+				local name = value.GetName and value:GetName()
 				if name and name ~= "" and not isPlayer then
 					gMsgC(COLOR_COMMENT)
 					gMsgF(string_format("-- %q", name))

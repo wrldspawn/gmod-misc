@@ -42,7 +42,12 @@ elseif CLIENT then
 		msg.text = str
 
 		table.insert(messages, msg)
-		LocalPlayer():PrintMessage(HUD_PRINTNOTIFY, str .. "\n")
+		local lply = LocalPlayer()
+		if IsValid(lply) and lply.PrintMessage then
+			lply:PrintMessage(HUD_PRINTNOTIFY, str .. "\n")
+		else
+			MsgC(Color(255, 255, 255), str .. "\n")
+		end
 	end
 
 	net.Receive(TAG, function()
