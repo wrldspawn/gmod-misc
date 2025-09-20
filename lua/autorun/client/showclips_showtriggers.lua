@@ -278,7 +278,6 @@ local function collectTriggerBrushes()
 	end
 	for _, class in ipairs(POINT_TYPES) do
 		for _, trigger in ipairs(MAP:FindByClass(class)) do
-			PrintTable(trigger)
 			local radius = trigger.radius or trigger.TriggerRadius or trigger.DamageRadius or trigger.EatRadius
 			if not radius then continue end
 
