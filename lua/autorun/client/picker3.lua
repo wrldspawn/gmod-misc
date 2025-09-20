@@ -161,7 +161,7 @@ local VEC_FORWARD = Vector(BOUNDS, 0, 0)
 local VEC_LEFT = Vector(0, BOUNDS, 0)
 local VEC_UP = Vector(0, 0, BOUNDS)
 
-local FORMAT_3 = "%d, %d, %d"
+local FORMAT_3 = "%.2f, %.2f, %.2f"
 
 local filter_cache = {}
 
@@ -274,6 +274,9 @@ hook.Add("HUDPaint", TAG, function()
 			if ent.model then
 				addLine(lines, ent.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
 			end
+
+			local pos = string.format(FORMAT_3, ent.origin:Unpack())
+			addLine(lines, pos, "Position: ", COLOR_FIELD, COLOR_TEXT)
 
 			if ent.angle then
 				local angle = string.format(FORMAT_3, ent.angle:Unpack())
