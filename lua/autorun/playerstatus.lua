@@ -30,9 +30,9 @@ if SERVER then
 			if seconds < 10 then
 				s = "0" .. s
 			end
-			timeStr = tostring(minutes) .. ":" .. s .. " minutes"
+			timeStr = tostring(minutes) .. ":" .. s .. " minute"
 		else
-			timeStr = seconds .. " seconds"
+			timeStr = seconds .. " second"
 		end
 
 		return timeStr
