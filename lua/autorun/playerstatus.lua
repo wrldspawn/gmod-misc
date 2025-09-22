@@ -100,6 +100,7 @@ if SERVER then
 	end)
 
 	hook.Add("PlayerInitialSpawn", TAG, function(ply)
+		if ply:IsBot() then return end
 		spawning[ply:UserID()] = true
 
 		statusicons[ply] = "spawning"
