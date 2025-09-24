@@ -29,6 +29,7 @@ local ENT_ICONS = {
 	infodecal = Material("icon16/image.png"),
 	player_speedmod = Material("icon16/lightning.png"),
 	point_clientcommand = Material("icon16/application_xp_terminal.png"),
+	point_message = Material("icon16/comment.png"),
 	point_message_multiplayer = Material("icon16/comment.png"),
 	point_servercommand = Material("icon16/application_xp_terminal.png"),
 	water_lod_control = Material("icon16/water.png"),

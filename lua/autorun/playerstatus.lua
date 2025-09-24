@@ -146,32 +146,36 @@ elseif CLIENT then
 	end)
 
 	local OFFSET = Vector(0, 0, 12)
-	hook.Add("PostPlayerDraw", TAG, function(ply)
+	hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, sky3d)
+		if skybox then return end
 		local lply = LocalPlayer()
-		if not IsValid(ply) then return end
-		if not ply:Alive() then return end
-		if ply == lply and not ply:ShouldDrawLocalPlayer() then return end
-		local icon = statusicons[ply]
-		if icon == nil then return end
-		local icon_mat = ICONS[icon]
-		if not icon_mat then return end
 
-		local ang = lply:EyeAngles()
-		local pos = ply:EyePos() + OFFSET + ang:Up()
+		for _, ply in player.Iterator() do
+			if not IsValid(ply) then return end
+			if not ply:Alive() then return end
+			if ply == lply and not ply:ShouldDrawLocalPlayer() then return end
+			local icon = statusicons[ply]
+			if icon == nil then return end
+			local icon_mat = ICONS[icon]
+			if not icon_mat then return end
 
-		ang:RotateAroundAxis(ang:Forward(), 90)
-		ang:RotateAroundAxis(ang:Right(), 90)
+			local ang = lply:EyeAngles()
+			local pos = ply:EyePos() + OFFSET + ang:Up()
 
-		cam.Start3D2D(pos, Angle(0, ang.y, 90), 0.5)
-		render.SuppressEngineLighting(true)
-		render.PushFilterMag(TEXFILTER.POINT)
-		render.PushFilterMin(TEXFILTER.POINT)
-		surface.SetMaterial(icon_mat)
-		surface.SetDrawColor(255, 255, 255)
-		surface.DrawTexturedRect(-8, 0, 16, 16)
-		render.PopFilterMin()
-		render.PopFilterMag()
-		render.SuppressEngineLighting(false)
-		cam.End3D2D()
+			ang:RotateAroundAxis(ang:Forward(), 90)
+			ang:RotateAroundAxis(ang:Right(), 90)
+
+			cam.Start3D2D(pos, Angle(0, ang.y, 90), 0.5)
+			render.SuppressEngineLighting(true)
+			render.PushFilterMag(TEXFILTER.POINT)
+			render.PushFilterMin(TEXFILTER.POINT)
+			surface.SetMaterial(icon_mat)
+			surface.SetDrawColor(255, 255, 255)
+			surface.DrawTexturedRect(-8, 0, 16, 16)
+			render.PopFilterMin()
+			render.PopFilterMag()
+			render.SuppressEngineLighting(false)
+			cam.End3D2D()
+		end
 	end)
 end
