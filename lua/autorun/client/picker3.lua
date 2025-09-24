@@ -1,5 +1,54 @@
 local TAG = "picker3"
 
+local ipairs = ipairs
+local isstring = isstring
+local unpack = unpack
+local Color = Color
+local EyePos = EyePos
+local EyeAngles = EyeAngles
+local Format = Format
+local IsValid = IsValid
+local LocalPlayer = LocalPlayer
+local LocalToWorld = LocalToWorld
+local ScrH = ScrH
+local ScrW = ScrW
+local Vector = Vector
+local TEXFILTER_POINT = TEXFILTER.POINT
+
+local cam_Start3D2D = cam.Start3D2D
+local cam_End3D2D = cam.End3D2D
+local render_SuppressEngineLighting = render.SuppressEngineLighting
+local render_PushFilterMag = render.PushFilterMag
+local render_PushFilterMin = render.PushFilterMin
+local render_PopFilterMag = render.PopFilterMag
+local render_PopFilterMin = render.PopFilterMin
+local string_Explode = string.Explode
+local surface_GetTextSize = surface.GetTextSize
+local surface_SetDrawColor = surface.SetDrawColor
+local surface_DrawLine = surface.DrawLine
+local surface_SetFont = surface.SetFont
+local surface_SetTextColor = surface.SetTextColor
+local surface_SetTextPos = surface.SetTextPos
+local surface_DrawText = surface.DrawText
+local surface_SetMaterial = surface.SetMaterial
+local surface_DrawTexturedRect = surface.DrawTexturedRect
+local table_sort = table.sort
+local util_IntersectRayWithOBB = util.IntersectRayWithOBB
+
+local COLOR = FindMetaTable("Color")
+local Color_Unpack = COLOR.Unpack
+
+local ANGLE = FindMetaTable("Angle")
+local Angle_Forward = ANGLE.Forward
+local Angle_Right = ANGLE.Right
+local Angle_RotateAroundAxis = ANGLE.RotateAroundAxis
+local Angle_Unpack = ANGLE.Unpack
+
+local VECTOR = FindMetaTable("Vector")
+local Vector_Distance = VECTOR.Distance
+local Vector_ToScreen = VECTOR.ToScreen
+local Vector_Unpack = VECTOR.Unpack
+
 local ENTITIES = setmetatable({}, { __mode = "k" })
 local MAP_ENTS = {}
 
@@ -252,7 +301,7 @@ local function addLine(lines, text, prefix, pColor, color)
 	if not text then return end
 
 	local str = prefix .. text
-	local tw = surface.GetTextSize(str)
+	local tw = surface_GetTextSize(str)
 	if tw > lines.longest then
 		lines.longest = tw
 	end
@@ -283,15 +332,24 @@ local FORMAT_3 = "%.2f, %.2f, %.2f"
 local filter_cache = {}
 local decal_cache = {}
 
+local function sortdist(a, b)
+	return a.distance < b.distance
+end
+
+local lply = LocalPlayer()
+
 hook.Add("HUDPaint", TAG, function()
 	if PICKER_ENABLED then
 		local to_render = {}
 		local axes = {}
 
-		local lply = LocalPlayer()
+		if not IsValid(lply) then
+			lply = LocalPlayer()
+		end
+
 		local eyepos = EyePos()
 		local eyeang = EyeAngles()
-		local forward = eyeang:Forward() * 32768
+		local forward = Angle_Forward(eyeang) * 32768
 
 		for _, ent in ipairs(MAP_ENTS) do
 			local entity = ent.entity
@@ -303,7 +361,7 @@ hook.Add("HUDPaint", TAG, function()
 				if entity:IsWeapon() and entity:GetOwner() == lply then continue end
 			end
 
-			local hitpos = util.IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
+			local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
 
 			local axis = {
 				pos = pos,
@@ -316,7 +374,7 @@ hook.Add("HUDPaint", TAG, function()
 				axis.hit = true
 			end
 
-			ent.distance = eyepos:Distance(pos)
+			ent.distance = Vector_Distance(eyepos, pos)
 
 			axes[#axes + 1] = axis
 		end
@@ -346,7 +404,7 @@ hook.Add("HUDPaint", TAG, function()
 				bounds_fallback = true
 			end
 
-			local hitpos = util.IntersectRayWithOBB(eyepos, forward, pos, ang, mins, maxs)
+			local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, mins, maxs)
 
 			local axis = {
 				pos = pos,
@@ -363,7 +421,7 @@ hook.Add("HUDPaint", TAG, function()
 					mins = mins,
 					maxs = maxs,
 					model = ent:GetModel(),
-					distance = eyepos:Distance(pos),
+					distance = Vector_Distance(eyepos, pos),
 					outputs = {},
 					bounds_fallback = bounds_fallback,
 				}
@@ -379,7 +437,7 @@ hook.Add("HUDPaint", TAG, function()
 			local pos = axis.pos
 			local ang = axis.ang
 
-			local spos = pos:ToScreen()
+			local spos = Vector_ToScreen(pos)
 			if not spos.visible then continue end
 
 			local alpha = axis.hit and 255 or 72
@@ -391,21 +449,19 @@ hook.Add("HUDPaint", TAG, function()
 			local pos_left = LocalToWorld(VEC_LEFT, ANGLE_ZERO, pos, ang)
 			local pos_up = LocalToWorld(VEC_UP, ANGLE_ZERO, pos, ang)
 
-			local spos_f = pos_forward:ToScreen()
-			local spos_l = pos_left:ToScreen()
-			local spos_u = pos_up:ToScreen()
+			local spos_f = Vector_ToScreen(pos_forward)
+			local spos_l = Vector_ToScreen(pos_left)
+			local spos_u = Vector_ToScreen(pos_up)
 
-			surface.SetDrawColor(255, 0, 0, alpha)
-			surface.DrawLine(spos.x, spos.y, spos_f.x, spos_f.y)
-			surface.SetDrawColor(0, 255, 0, alpha)
-			surface.DrawLine(spos.x, spos.y, spos_l.x, spos_l.y)
-			surface.SetDrawColor(0, 0, 255, alpha)
-			surface.DrawLine(spos.x, spos.y, spos_u.x, spos_u.y)
+			surface_SetDrawColor(255, 0, 0, alpha)
+			surface_DrawLine(spos.x, spos.y, spos_f.x, spos_f.y)
+			surface_SetDrawColor(0, 255, 0, alpha)
+			surface_DrawLine(spos.x, spos.y, spos_l.x, spos_l.y)
+			surface_SetDrawColor(0, 0, 255, alpha)
+			surface_DrawLine(spos.x, spos.y, spos_u.x, spos_u.y)
 		end
 
-		table.sort(to_render, function(a, b)
-			return a.distance < b.distance
-		end)
+		table_sort(to_render, sortdist)
 
 		local mindist, nexty = math.huge, -math.huge
 		for _, ent in ipairs(to_render) do
@@ -416,7 +472,7 @@ hook.Add("HUDPaint", TAG, function()
 
 			local center = pos:ToScreen()
 
-			surface.SetFont("BudgetLabel")
+			surface_SetFont("BudgetLabel")
 
 			local lines = {}
 			addLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
@@ -461,22 +517,22 @@ hook.Add("HUDPaint", TAG, function()
 				addLine(lines, ent.texture, "Texture: ", COLOR_FIELD, decal_cache[ent.texture] and COLOR_TEXT or COLOR_INVALID)
 			end
 			if ent.color then
-				local col = Color(unpack(string.Explode(" ", ent.color)))
+				local col = Color(unpack(string_Explode(" ", ent.color)))
 				col.a = 255
 				addLine(lines, ent.color, "Color: ", COLOR_FIELD, col)
 			end
 
-			local posStr = string.format(FORMAT_3, pos:Unpack())
+			local posStr = Format(FORMAT_3, Vector_Unpack(pos))
 			addLine(lines, posStr, "Position: ", COLOR_FIELD, COLOR_TEXT)
 
 			if ent.angle then
-				local angle = string.format(FORMAT_3, ang:Unpack())
+				local angle = Format(FORMAT_3, Angle_Unpack(ang))
 				addLine(lines, angle, "Angle: ", COLOR_FIELD, COLOR_TEXT)
 			end
 
 			if not ent.bounds_fallback then
-				local mins = string.format(FORMAT_3, ent.mins:Unpack())
-				local maxs = string.format(FORMAT_3, ent.maxs:Unpack())
+				local mins = Format(FORMAT_3, Vector_Unpack(ent.mins))
+				local maxs = Format(FORMAT_3, Vector_Unpack(ent.maxs))
 				addLine(lines, maxs, "Maxs: ", COLOR_FIELD, COLOR_TEXT)
 				addLine(lines, mins, "Mins: ", COLOR_FIELD, COLOR_TEXT)
 			end
@@ -491,7 +547,7 @@ hook.Add("HUDPaint", TAG, function()
 				end
 			end
 
-			local _, th = surface.GetTextSize("W")
+			local _, th = surface_GetTextSize("W")
 
 			local w = lines.longest / 2
 			local h = th * (#lines / 2)
@@ -506,15 +562,15 @@ hook.Add("HUDPaint", TAG, function()
 				y = newpos.y
 			end
 
-			surface.SetDrawColor(255, 255, 255, 96)
-			surface.DrawLine(center.x, center.y, x + w, y + h)
+			surface_SetDrawColor(255, 255, 255, 96)
+			surface_DrawLine(center.x, center.y, x + w, y + h)
 
 			for _, line in ipairs(lines) do
-				surface.SetTextColor(line.pColor:Unpack())
-				surface.SetTextPos(x, y)
-				surface.DrawText(line.prefix)
-				surface.SetTextColor(line.color:Unpack())
-				surface.DrawText(line.text)
+				surface_SetTextColor(Color_Unpack(line.pColor))
+				surface_SetTextPos(x, y)
+				surface_DrawText(line.prefix)
+				surface_SetTextColor(Color_Unpack(line.color))
+				surface_DrawText(line.text)
 				y = y + th
 			end
 
@@ -538,7 +594,8 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 
 	local eyepos = EyePos()
 	local eyeang = EyeAngles()
-	local forward = eyeang:Forward() * 32768
+	local fwd = Angle_Forward(eyeang)
+	local forward = fwd * 32768
 
 	for _, ent in ipairs(MAP_ENTS) do
 		if ent.model ~= nil then continue end
@@ -546,13 +603,13 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		local pos = ent.origin
 		local ang = ent.angle or ANGLE_ZERO
 
-		local dist = eyepos:Distance(pos)
+		local dist = Vector_Distance(eyepos, pos)
 		if dist > 512 then continue end
 
-		local spos = pos:ToScreen()
+		local spos = Vector_ToScreen(pos)
 		if not spos.visible then continue end
 
-		local hitpos = util.IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
+		local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
 
 		local icon = {
 			class = ent.class,
@@ -568,8 +625,8 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		to_render[#to_render + 1] = icon
 	end
 
-	eyeang:RotateAroundAxis(eyeang:Forward(), 90)
-	eyeang:RotateAroundAxis(eyeang:Right(), 90)
+	Angle_RotateAroundAxis(eyeang, fwd, 90)
+	Angle_RotateAroundAxis(eyeang, Angle_Right(eyeang), 90)
 
 	for _, icon in ipairs(to_render) do
 		local alpha = icon.hit and 255 or 72
@@ -579,18 +636,18 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 
 		local icon_mat = ENT_ICONS[icon.class] or ICON_DEFAULT
 
-		cam.Start3D2D(icon.pos, eyeang, 0.5)
-		render.SuppressEngineLighting(true)
-		render.PushFilterMag(TEXFILTER.POINT)
-		render.PushFilterMin(TEXFILTER.POINT)
+		cam_Start3D2D(icon.pos, eyeang, 0.5)
+		render_SuppressEngineLighting(true)
+		render_PushFilterMag(TEXFILTER_POINT)
+		render_PushFilterMin(TEXFILTER_POINT)
 
-		surface.SetMaterial(icon_mat)
-		surface.SetDrawColor(255, 255, 255, alpha)
-		surface.DrawTexturedRect(-8, -8, 16, 16)
+		surface_SetMaterial(icon_mat)
+		surface_SetDrawColor(255, 255, 255, alpha)
+		surface_DrawTexturedRect(-8, -8, 16, 16)
 
-		render.PopFilterMin()
-		render.PopFilterMag()
-		render.SuppressEngineLighting(false)
-		cam.End3D2D()
+		render_PopFilterMin()
+		render_PopFilterMag()
+		render_SuppressEngineLighting(false)
+		cam_End3D2D()
 	end
 end)
