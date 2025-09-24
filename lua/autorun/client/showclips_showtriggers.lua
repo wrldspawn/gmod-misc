@@ -778,12 +778,13 @@ hook.Add("HUDPaint", "showtriggers", function()
 					local ent = MAP:FindByName(trigger.filter)[1]
 					if ent then
 						filter = trigger.filter
+						local badFilter = string.format("<bad filter: %s>", trigger.filter)
 						if ent.classname == "filter_activator_class" then
-							filter = "By class: " .. ent.filterclass
+							filter = "By class: " .. (ent.filterclass or badFilter)
 						elseif ent.classname == "filter_activator_name" then
-							filter = "By name: " .. ent.filtername
+							filter = "By name: " .. (ent.filtername or badFilter)
 						elseif ent.classname == "filter_activator_team" then
-							filter = "By team: " .. team.GetName(ent.filterteam)
+							filter = "By team: " .. ent.filterteam and team.GetName(ent.filterteam) or badFilter
 						end
 						filter_cache[trigger.filter] = filter
 					else
