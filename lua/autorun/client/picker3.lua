@@ -383,13 +383,16 @@ hook.Add("HUDPaint", TAG, function()
 			if not IsValid(ent) then continue end
 
 			local pos = ent:GetPos()
+			local myPos = lply:GetPos()
 
 			if (
 						ent == lply or
 						ent:GetParent() == lply or
 						(ent:IsWeapon() and ent:GetOwner() == lply) or
 						ent == lply:GetViewModel() or
-						pos == lply:GetPos()
+						pos == myPos or
+						Vector_Distance(pos, eyepos) < 16 or
+						ent == lply:GetVehicle()
 					) and not lply:ShouldDrawLocalPlayer() then
 				continue
 			end
