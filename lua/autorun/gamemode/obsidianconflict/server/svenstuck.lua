@@ -40,11 +40,19 @@ local function swapEntities(ent1, ent2)
 	ent1:SetPos(pos2)
 	ent2:SetPos(pos1)
 
-	if ent1:IsPlayer() then ent1:AddFlags(FL_DUCKING) end
-	if ent2:IsPlayer() then ent2:AddFlags(FL_DUCKING) end
+	local ent1Duck = false
+	if ent1:IsPlayer() and bit.band(ent1:GetFlags(), FL_DUCKING) == 0 then
+		ent1:AddFlags(FL_DUCKING)
+		ent1Duck = true
+	end
+	local ent2Duck = false
+	if ent2:IsPlayer() and bit.band(ent1:GetFlags(), FL_DUCKING) == 0 then
+		ent2:AddFlags(FL_DUCKING)
+		ent2Duck = true
+	end
 	timer.Simple(engine.TickInterval() * 2, function()
-		if ent1:IsValid() and ent1:IsPlayer() then ent1:RemoveFlags(FL_DUCKING) end
-		if ent2:IsValid() and ent2:IsPlayer() then ent2:RemoveFlags(FL_DUCKING) end
+		if ent1:IsValid() and ent1:IsPlayer() and ent1Duck then ent1:RemoveFlags(FL_DUCKING) end
+		if ent2:IsValid() and ent2:IsPlayer() and ent2Duck then ent2:RemoveFlags(FL_DUCKING) end
 	end)
 
 	ent1._lastSwap = CurTime()
@@ -59,7 +67,7 @@ hook.Add("KeyPress", TAG, function(ply, key)
 	local ent = tr.Entity
 	if not ent:IsValid() then return end
 
-	if ent:IsPlayer() and key == IN_USE then
+	if ent:IsPlayer() and key == IN_USE and not ply:KeyDown(IN_WALK) then
 		swapEntities(ply, ent)
 	elseif ent:IsNPC() and ent:Disposition(ply) == D_LI and key == IN_RELOAD then
 		swapEntities(ply, ent)
