@@ -29,17 +29,33 @@ hook.Add("NPCMakerSpawn", TAG, function()
 
 	local class = IsValid(npc) and npc:GetClass()
 	if not class then
-		class = maker:GetInternalVariable("NPCType")
+		class = maker:GetInternalVariable("NPCType") or maker:GetInternalVariable("npctype")
+	end
+
+	if class == "npc_hgrunt" then
+		class = "monster_human_grunt"
 	end
 
 	if GAMEMODE.NPCReplacements then
 		class = GAMEMODE.NPCReplacements[class] or class
 	end
 
+	class = "\7#" .. class
+
+	if IsValid(npc) then
+		local displayname = npc:GetNW2String("displayname", "")
+		if displayname ~= "" then
+			class = displayname
+		end
+		if maker.oc_npcname then
+			class = maker.oc_npcname
+		end
+	end
+
 	local name = maker:GetName()
 	if name and name ~= "" then
-		AddHUDNotify(string.format("\7#%s spawner %q has %d NPC%s left.", class, name, maker._counter, plural))
+		AddHUDNotify(string.format("%s spawner %q has %d NPC%s left.", class, name, maker._counter, plural))
 	else
-		AddHUDNotify(string.format("\7#%s spawner has %d NPC%s left.", class, maker._counter, plural))
+		AddHUDNotify(string.format("#%s spawner has %d NPC%s left.", class, maker._counter, plural))
 	end
 end)
