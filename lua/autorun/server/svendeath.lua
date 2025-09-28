@@ -33,7 +33,6 @@ local PHRASES_DMG = {
 hook.Add("DoPlayerDeath", "svendeath", function(ply, atk, dmg)
 	local inf = dmg:GetInflictor()
 	local infClass = inf:IsValid() and inf:GetClass()
-	local atkClass = atk:IsValid() and atk:GetClass()
 
 	local suicide = ply == atk
 	local mountedGun = infClass and infClass:find("^func_tank")
@@ -80,17 +79,20 @@ hook.Add("DoPlayerDeath", "svendeath", function(ply, atk, dmg)
 		elseif dmg:IsDamageType(DMG_BUCKSHOT) then
 			phrase = "ate pellets of lead"
 			prefix = "from"
+		elseif dmg:IsDamageType(DMG_BURN) then
+			phrase = "was burnt"
 		elseif
-				dmg:IsDamageType(DMG_SONIC) or
-				dmg:IsDamageType(DMG_ENERGYBEAM) or
-				dmg:IsDamageType(DMG_NERVEGAS) or
-				dmg:IsDamageType(DMG_SNIPER) or
-				dmg:IsDamageType(DMG_MISSILEDEFENSE) or
-				dmg:IsDamageType(DMG_DROWN)
+				phrase == PHRASES_DMG[DMG_SONIC] or
+				phrase == PHRASES_DMG[DMG_ENERGYBEAM] or
+				phrase == PHRASES_DMG[DMG_NERVEGAS] or
+				phrase == PHRASES_DMG[DMG_SNIPER] or
+				phrase == PHRASES_DMG[DMG_MISSILEDEFENSE] or
+				phrase == PHRASES_DMG[DMG_DROWN]
 		then
 			prefix = "from"
 		elseif atk:IsNPC() and atk:Classify() == CLASS_ZOMBIE then
 			phrase = "was mauled"
+			prefix = "by"
 		end
 
 		local name = "\7#" .. atk:GetClass()
