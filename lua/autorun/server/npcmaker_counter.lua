@@ -19,7 +19,15 @@ hook.Add("NPCMakerSpawn", TAG, function()
 	local maker = CALLER
 	local npc = ACTIVATOR
 
-	local total = maker:GetInternalVariable("MaxNPCCount")
+	if not IsValid(maker) then return end
+
+	if maker:GetClass() ~= "npc_maker" and maker:GetClass() ~= "npc_template_maker" and IsValid(npc) then
+		maker = npc:GetOwner()
+	end
+	if maker:GetClass() ~= "npc_maker" and maker:GetClass() ~= "npc_template_maker" then return end
+
+
+	local total = maker:GetInternalVariable("MaxNPCCount") or maker:GetInternalVariable("maxnpccount")
 	if maker._counter == nil then
 		maker._counter = total + 1
 	end

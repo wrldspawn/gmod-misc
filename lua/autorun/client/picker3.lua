@@ -392,7 +392,8 @@ hook.Add("HUDPaint", TAG, function()
 						ent == lply:GetViewModel() or
 						pos == myPos or
 						Vector_Distance(pos, eyepos) < 16 or
-						ent == lply:GetVehicle()
+						ent == lply:GetVehicle() or
+						ent == lply:GetHands()
 					) and not lply:ShouldDrawLocalPlayer() then
 				continue
 			end
