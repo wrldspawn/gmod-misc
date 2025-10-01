@@ -1,3 +1,6 @@
+local gamemode = engine.ActiveGamemode()
+if gamemode == "obsidianconflict" then return end
+
 local enabled = CreateClientConVar("cl_vm_lag_enabled", "1", true, false, "Enable Half-Life 2 viewmodel sway/lag", 0,
 	1)
 local _maxLag = CreateClientConVar("cl_vm_lag_max", "1.5", true, false,
