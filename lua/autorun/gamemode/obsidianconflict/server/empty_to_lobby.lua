@@ -24,3 +24,9 @@ hook.Add("player_connect", TAG, function()
 		timer.Remove(TAG)
 	end
 end)
+
+hook.Add("PlayerInitialSpawn", TAG, function()
+	if timer.Exists(TAG) then
+		timer.Remove(TAG)
+	end
+end)

@@ -1,9 +1,10 @@
-if (chat.IsActive) then return end
+if chat.IsActive then return end
 local CHAT_HISTORY       = "history"
 local CHAT_FILTER_BUTTON = "filters"
 local CHAT_INPUT_LINE    = "input_main"
 local CHAT_INPUT         = "input"
 local CHAT_MAIN          = "main"
+local CHAT_SCROLLBAR     = "scrollbar"
 
 local CHAT_MOD           = {
 	--[[ stores children in CHAT_MOD[value] (by name) ]] --
@@ -11,6 +12,7 @@ local CHAT_MOD           = {
 		["HudChatHistory"]    = CHAT_HISTORY,
 		["ChatFiltersButton"] = CHAT_FILTER_BUTTON,
 		["ChatInputLine"]     = CHAT_INPUT_LINE,
+		["ScrollBar"]         = CHAT_SCROLLBAR,
 	},
 	panels = {},
 	old = {},
@@ -167,6 +169,8 @@ function chat.GetPanel() return CHAT_MOD:Get(CHAT_MAIN) end
 
 function chat.GetFilterButton() return CHAT_MOD:Get(CHAT_FILTER_BUTTON) end
 
+function chat.GetScrollbar() return CHAT_MOD:Get(CHAT_SCROLLBAR) end
+
 function CHAT_MOD:ForChildren(pnl, fn)
 	if (not pnl:HasChildren()) then return end
 	for k, v in pairs(pnl:GetChildren()) do
@@ -223,25 +227,44 @@ function CHAT_MOD:Init(inp)
 			return
 		end
 
+		local hist = self.panels[CHAT_HISTORY]
 		x, y = chat:GetPos()
-		x = x + ScreenScaleH(265) + 4
-		y = y + ScreenScaleH(2) + 4
+		x = x + ScreenScaleH(10)
+		y = y + ScreenScaleH(17) + 2
+		x = x + hist:GetWide() - 4
 		input.SetCursorPos(x, y)
 
 		timer.Simple(0.1, function()
 			hovered = vgui.GetHoveredPanel()
-			if IsValid(hovered) and hovered:GetName() == "ChatFiltersButton" then
-				self.panels[CHAT_FILTER_BUTTON] = hovered
+			if IsValid(hovered) and hovered:GetName() == "UpButton" then
+				self.panels[CHAT_SCROLLBAR] = hovered:GetParent()
 				self:Save(hovered)
 			else
-				print("Chat Mod FAILED: No ChatFiltersButton (wasn't valid or using BaseChat.res mod)")
+				print("Chat Mod FAILED: No ScrollBar (wasn't valid or using BaseChat.res mod)")
 				input.SetCursorPos(curX, curY)
 				return
 			end
 
-			input.SetCursorPos(curX, curY)
+			x, y = chat:GetPos()
+			x = x + ScreenScaleH(265) + 4
+			y = y + ScreenScaleH(2) + 4
+			input.SetCursorPos(x, y)
 
-			hook.Run("ChatModInitialize", chat)
+			timer.Simple(0.1, function()
+				hovered = vgui.GetHoveredPanel()
+				if IsValid(hovered) and hovered:GetName() == "ChatFiltersButton" then
+					self.panels[CHAT_FILTER_BUTTON] = hovered
+					self:Save(hovered)
+				else
+					print("Chat Mod FAILED: No ChatFiltersButton (wasn't valid or using BaseChat.res mod)")
+					input.SetCursorPos(curX, curY)
+					return
+				end
+
+				input.SetCursorPos(curX, curY)
+
+				hook.Run("ChatModInitialize", chat)
+			end)
 		end)
 	end)
 
