@@ -61,9 +61,7 @@ local BOUNDS = 8
 local function CreateIcon(class, path)
 	return CreateMaterial("picker3_icon-" .. class, "UnlitGeneric", {
 		["$basetexture"] = path,
-		["$alpha"] = 1,
-		["$alphatest"] = 1,
-		["$vertexcolor"] = 1,
+		["$vertexalpha"] = 1,
 	})
 end
 
@@ -71,17 +69,50 @@ local ICON_DEFAULT = Material("icon16/help.png")
 local ICON_SPAWNPOINT = Material("icon16/user_add.png")
 local ICON_FILTER = Material("icon16/tag_blue.png")
 local ICON_NODE = Material("icon16/map_go.png")
+
+local ICON_CLOUDS = Material("icon16/weather_clouds.png")
+local ICON_COMMAND = Material("icon16/application_xp_terminal.png")
+local ICON_COMMENT = Material("icon16/comment.png")
+local ICON_SOUND = Material("icon16/sound.png")
+local ICON_TARGET = CreateIcon("info_target", "editor/info_target")
+local ICON_WATER = Material("icon16/water.png")
+local ICON_WEAPON = Material("icon16/gun.png")
+local ICON_VECTOR = Material("icon16/vector.png")
+
 local ENT_ICONS = {
+	ambient_generic = ICON_SOUND,
+	env_beam = ICON_VECTOR,
 	env_entity_maker = Material("icon16/brick_add.png"),
+	env_fog_controller = ICON_CLOUDS,
+	env_smokestack = Material("icon16/fire.png"),
+	env_soundscape_proxy = ICON_SOUND,
+	env_soundscape_triggerable = ICON_SOUND,
+	env_splash = ICON_WATER,
+	env_steam = ICON_CLOUDS,
 	game_countdown_timer = Material("icon16/hourglass.png"),
+	game_score = Material("icon16/table_add.png"),
+	info_ladder_dismount = ICON_TARGET,
+	info_target = ICON_TARGET,
 	info_waypoint = Material("icon16/exclamation.png"),
 	infodecal = Material("icon16/image.png"),
+	keyframe_rope = ICON_VECTOR,
+	light_spot = Material("icon16/lightbulb.png"),
+	logic_merchant_relay = Material("icon16/cart.png"),
+	move_rope = ICON_VECTOR,
+	npc_bullseye = ICON_TARGET,
+	path_track = Material("icon16/chart_line.png"),
+	phys_constraint = Material("icon16/link.png"),
+	phys_constraintsystem = Material("icon16/link.png"),
+	phys_lengthconstraint = Material("icon16/link.png"),
+	phys_keepupright = Material("icon16/arrow_up.png"),
 	player_speedmod = Material("icon16/lightning.png"),
-	point_clientcommand = Material("icon16/application_xp_terminal.png"),
-	point_message = Material("icon16/comment.png"),
-	point_message_multiplayer = Material("icon16/comment.png"),
-	point_servercommand = Material("icon16/application_xp_terminal.png"),
-	water_lod_control = Material("icon16/water.png"),
+	point_camera = Material("icon16/camera.png"),
+	point_clientcommand = ICON_COMMAND,
+	point_message = ICON_COMMENT,
+	point_message_multiplayer = ICON_COMMENT,
+	point_servercommand = ICON_COMMAND,
+	scripted_sequence = Material("icon16/script_go.png"),
+	water_lod_control = ICON_WATER,
 }
 
 local SPAWNPOINT_CLASSES = {
@@ -168,19 +199,40 @@ for _, class in ipairs(NODE_CLASSES) do
 	ENT_ICONS[class] = ICON_NODE
 end
 
+local function getupvalues(f)
+	local i, t = 0, {}
+
+	while true do
+		i = i + 1
+		local key, val = debug.getupvalue(f, i)
+		if not key then break end
+		t[key] = val
+	end
+
+	return t
+end
+
 local MAP
+
+-- handled by showtriggers
+local IGNORE = {
+	point_hurt = true,
+	point_teleport = true,
+	point_vehiclespawn = true,
+	point_trigger = true,
+	point_weapon_eater = true,
+	point_push = true,
+}
+
 local function GetMapEnts()
 	if NikNaks then
-		MAP = NikNaks.CurrentMap
+		local parseEntityData = getupvalues(NikNaks.__metatables.BSP.GetEntities).parseEntityData
+		local ParseEntity = getupvalues(parseEntityData).ParseEntity
+		local _tableTypes = getupvalues(ParseEntity)._tableTypes
+		_tableTypes.OnHitMax = true
+		NikNaks.CurrentMap._entities = nil
 
-		-- handled by showtriggers
-		local IGNORE = {
-			point_hurt = true,
-			point_teleport = true,
-			point_vehiclespawn = true,
-			point_trigger = true,
-			point_weapon_eater = true,
-		}
+		MAP = NikNaks.CurrentMap
 
 		local bmodels = MAP:GetBModels()
 
@@ -192,11 +244,14 @@ local function GetMapEnts()
 				creationid = idx + 1235, -- see MapCreationID wiki note for this magic number
 				class = class,
 				name = ent.targetname,
-				filter = ent.filtername,
+				filter = ent.filtername or ent.filterclass or ent.filterteam,
 				origin = ent.origin,
 				angle = ent.angles,
 				model = ent.model,
-				texture = ent.texture,
+				texture = ent.texture or ent.image,
+				color = ent.color or ent._light,
+				text = ent.text or ent.message,
+				target = ent.target or ent.landmark or ent.attach1 or ent.entitytemplate,
 				disabled = tobool(ent.startdisabled ~= nil and ent.startdisabled or ent.StartDisabled),
 				outputs = {},
 			}
@@ -220,16 +275,26 @@ local function GetMapEnts()
 					local path = "editor/" .. class
 					if file.Exists("materials/" .. path .. ".vmt", "GAME") then
 						ENT_ICONS[class] = CreateIcon(class, path)
+					elseif class:find("^weapon_") then
+						ENT_ICONS[class] = ICON_WEAPON
 					end
 				end
 			end
-
-			info.color = ent.color or ent._light
 
 			if not info.mins and not info.maxs then
 				info.mins = Vector(-BOUNDS, -BOUNDS, -BOUNDS)
 				info.maxs = Vector(BOUNDS, BOUNDS, BOUNDS)
 				info.bounds_fallback = true
+			end
+
+			if info.target then
+				info.target_invalid = MAP:FindByName(info.target)[1] == nil
+				if info.target_invalid then
+					info.target_invalid = MAP:FindByClass(info.target)[1] == nil
+				end
+				if info.target == "player" then
+					info.target_invalid = false
+				end
 			end
 
 			for k, v in next, ent do
@@ -317,6 +382,7 @@ end
 local COLOR_TEXT = Color(255, 255, 255)
 local COLOR_NAME = Color(0, 192, 0)
 local COLOR_OUTPUT = Color(0, 192, 255)
+local COLOR_TARGET = Color(255, 128, 0)
 local COLOR_INVALID = Color(255, 0, 0)
 local COLOR_FILTER = Color(231, 16, 148)
 local COLOR_FIELD = Color(192, 192, 192) -- temp color?
@@ -338,9 +404,83 @@ end
 
 local lply = LocalPlayer()
 
+local SCROLL_ENABLED = false
+local SCROLL_ENABLED_LAST = false
+local SCROLL_OFFSET = 0
+
+hook.Add("PlayerBindPress", TAG, function(ply, bind, pressed, code)
+	if SCROLL_ENABLED and pressed and (code == MOUSE_WHEEL_UP or code == MOUSE_WHEEL_DOWN) then
+		surface_SetFont("BudgetLabel")
+		local _, th = surface_GetTextSize("W")
+
+
+		if code == MOUSE_WHEEL_UP then
+			SCROLL_OFFSET = SCROLL_OFFSET - th
+			if SCROLL_OFFSET < 0 then SCROLL_OFFSET = 0 end
+		else
+			SCROLL_OFFSET = SCROLL_OFFSET + th
+		end
+
+		return true
+	end
+end)
+
+local function render_data(data, stacking, mindist, nexty)
+	surface_SetFont("BudgetLabel")
+	local _, th = surface_GetTextSize("W")
+
+	local x, y, w, h, cx, cy = data.x, data.y, data.w, data.h, data.cx, data.cy
+
+	if stacking and nexty > y then y = nexty end
+
+	local offset = stacking and SCROLL_OFFSET or 0
+
+	local contain = true
+	if stacking then
+		contain = not SCROLL_ENABLED
+	end
+	if contain and is_outside_circle((ScrW() / 2) - x, (ScrH() / 2) - y, ScrH() - (64 + 48 + 8)) then
+		local newpos = keep_inside_circle(x, y, ScrH() - (64 + 48 + 8))
+		x = newpos.x
+		y = newpos.y
+	end
+
+	surface_SetDrawColor(255, 255, 255, 96)
+	surface_DrawLine(cx, cy, x + w, (y - offset) + h)
+
+	for _, line in ipairs(data.lines) do
+		surface_SetTextColor(Color_Unpack(line.pColor))
+		surface_SetTextPos(x, y - offset)
+		surface_DrawText(line.prefix)
+		surface_SetTextColor(Color_Unpack(line.color))
+		surface_DrawText(line.text)
+		y = y + th
+	end
+
+	if stacking then
+		local _x, _y = x - cx, y - cy
+		local dist = _x * _x + _y * _y * th
+
+		if dist < mindist then
+			mindist = dist
+		end
+		nexty = y + (th / 2)
+		return mindist, nexty
+	end
+end
+
 hook.Add("HUDPaint", TAG, function()
 	if PICKER_ENABLED then
+		SCROLL_ENABLED_LAST = SCROLL_ENABLED
+		SCROLL_ENABLED = input.IsKeyDown(KEY_LALT)
+		if SCROLL_ENABLED_LAST and not SCROLL_ENABLED then
+			SCROLL_OFFSET = 0
+		end
+
+		local to_process = {}
+		local processed = {}
 		local to_render = {}
+		local to_stack = {}
 		local axes = {}
 
 		if not IsValid(lply) then
@@ -357,11 +497,18 @@ hook.Add("HUDPaint", TAG, function()
 			local pos = isvalid and entity:GetPos() or ent.origin
 			local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
 
+			local dist = Vector_Distance(eyepos, pos)
+			if dist > 32768 then continue end
+			ent.distance = dist
+
 			if isvalid then
 				if entity:IsWeapon() and entity:GetOwner() == lply then continue end
 			end
 
 			local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
+
+			local scrpos = Vector_ToScreen(pos)
+			if hitpos == nil and not scrpos.visible then continue end
 
 			local axis = {
 				pos = pos,
@@ -370,11 +517,9 @@ hook.Add("HUDPaint", TAG, function()
 			}
 
 			if hitpos ~= nil then
-				to_render[#to_render + 1] = ent
+				to_process[#to_process + 1] = ent
 				axis.hit = true
 			end
-
-			ent.distance = Vector_Distance(eyepos, pos)
 
 			axes[#axes + 1] = axis
 		end
@@ -384,6 +529,9 @@ hook.Add("HUDPaint", TAG, function()
 
 			local pos = ent:GetPos()
 			local myPos = lply:GetPos()
+			local dist = Vector_Distance(pos, eyepos)
+
+			if dist > 32768 then continue end
 
 			if (
 						ent == lply or
@@ -391,7 +539,7 @@ hook.Add("HUDPaint", TAG, function()
 						(ent:IsWeapon() and ent:GetOwner() == lply) or
 						ent == lply:GetViewModel() or
 						pos == myPos or
-						Vector_Distance(pos, eyepos) < 16 or
+						dist < 16 or
 						ent == lply:GetVehicle() or
 						ent == lply:GetHands()
 					) and not lply:ShouldDrawLocalPlayer() then
@@ -409,6 +557,9 @@ hook.Add("HUDPaint", TAG, function()
 			end
 
 			local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, mins, maxs)
+
+			local scrpos = Vector_ToScreen(pos)
+			if hitpos == nil and not scrpos.visible then continue end
 
 			local axis = {
 				pos = pos,
@@ -430,7 +581,7 @@ hook.Add("HUDPaint", TAG, function()
 					bounds_fallback = bounds_fallback,
 				}
 
-				to_render[#to_render + 1] = info
+				to_process[#to_process + 1] = info
 				axis.hit = true
 			end
 
@@ -445,7 +596,7 @@ hook.Add("HUDPaint", TAG, function()
 			if not spos.visible then continue end
 
 			local alpha = axis.hit and 255 or 72
-			if #to_render == 0 then
+			if #to_process == 0 then
 				alpha = 255
 			end
 
@@ -465,18 +616,18 @@ hook.Add("HUDPaint", TAG, function()
 			surface_DrawLine(spos.x, spos.y, spos_u.x, spos_u.y)
 		end
 
-		table_sort(to_render, sortdist)
+		table_sort(to_process, sortdist)
 
-		local mindist, nexty = math.huge, -math.huge
-		for _, ent in ipairs(to_render) do
+		surface_SetFont("BudgetLabel")
+		local _, th = surface_GetTextSize("W")
+
+		for _, ent in ipairs(to_process) do
 			local entity = ent.entity
 			local isvalid = IsValid(entity)
 			local pos = isvalid and entity:GetPos() or ent.origin
 			local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
 
 			local center = pos:ToScreen()
-
-			surface_SetFont("BudgetLabel")
 
 			local lines = {}
 			addLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
@@ -486,9 +637,10 @@ hook.Add("HUDPaint", TAG, function()
 
 			addLine(lines, ent.name, "Name: ", COLOR_NAME, COLOR_TEXT)
 
-			if ent.filter and MAP then
+			local is_filter = ent.class:find("^filter_")
+			if ent.filter and MAP and not is_filter then
 				local filter = filter_cache[ent.filter]
-				if not filter then
+				if filter == nil then
 					local filterent = MAP:FindByName(ent.filter)[1]
 					if filterent then
 						filter = ent.filter
@@ -511,12 +663,18 @@ hook.Add("HUDPaint", TAG, function()
 				else
 					addLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
 				end
+			elseif is_filter then
+				addLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
 			end
 
 			addLine(lines, ent.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
 			if ent.texture then
 				if decal_cache[ent.texture] == nil then
-					decal_cache[ent.texture] = file.Exists("materials/" .. ent.texture .. ".vmt", "GAME")
+					local path = "materials/" .. ent.texture
+					if not ent.texture:find("%.vmt$") then
+						path = path .. ".vmt"
+					end
+					decal_cache[ent.texture] = file.Exists(path, "GAME")
 				end
 				addLine(lines, ent.texture, "Texture: ", COLOR_FIELD, decal_cache[ent.texture] and COLOR_TEXT or COLOR_INVALID)
 			end
@@ -541,6 +699,10 @@ hook.Add("HUDPaint", TAG, function()
 				addLine(lines, mins, "Mins: ", COLOR_FIELD, COLOR_TEXT)
 			end
 
+			addLine(lines, ent.text, "Text: ", COLOR_FIELD, COLOR_TEXT)
+
+			addLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
+
 			for on, outputs in next, ent.outputs do
 				if isstring(outputs) then
 					addLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
@@ -551,40 +713,108 @@ hook.Add("HUDPaint", TAG, function()
 				end
 			end
 
-			local _, th = surface_GetTextSize("W")
-
 			local w = lines.longest / 2
 			local h = th * (#lines / 2)
 			local x = center.x - w
 			local y = center.y - h
 
-			if nexty > y then y = nexty end
+			local data = {
+				x = x,
+				y = y,
+				w = w,
+				h = h,
+				cx = center.x,
+				cy = center.y,
+				lines = lines,
+			}
 
-			if is_outside_circle((ScrW() / 2) - x, (ScrH() / 2) - y, ScrH() - (64 + 48 + 8)) then
-				local newpos = keep_inside_circle(x, y, ScrH() - (64 + 48 + 8))
-				x = newpos.x
-				y = newpos.y
+			processed[#processed + 1] = data
+		end
+
+		for i, data in ipairs(processed) do
+			if #processed == 1 then
+				to_render[#to_render + 1] = data
+				break
 			end
 
-			surface_SetDrawColor(255, 255, 255, 96)
-			surface_DrawLine(center.x, center.y, x + w, y + h)
-
-			for _, line in ipairs(lines) do
-				surface_SetTextColor(Color_Unpack(line.pColor))
-				surface_SetTextPos(x, y)
-				surface_DrawText(line.prefix)
-				surface_SetTextColor(Color_Unpack(line.color))
-				surface_DrawText(line.text)
-				y = y + th
+			local x1, y1, w1, h1 = data.x, data.y, data.w, data.h
+			local x2, y2, w2, h2
+			if i == 1 then
+				local next_data = processed[2]
+				x2, y2, w2, h2 = next_data.x, next_data.y, next_data.w, next_data.h
+			else
+				local prev_data = processed[i - 1]
+				x2, y2, w2, h2 = prev_data.x, prev_data.y, prev_data.w, prev_data.h
 			end
 
-			local _x, _y = x - center.x, y - center.y
-			local dist = _x * _x + _y * _y * th
-
-			if dist < mindist then
-				mindist = dist
+			if is_outside_circle((ScrW() / 2) - x1, (ScrH() / 2) - y1, ScrH() - (64 + 48 + 8)) then
+				local newpos = keep_inside_circle(x1, y1, ScrH() - (64 + 48 + 8))
+				x1 = newpos.x
+				y1 = newpos.y
 			end
-			nexty = y + (th / 2)
+			if is_outside_circle((ScrW() / 2) - x2, (ScrH() / 2) - y2, ScrH() - (64 + 48 + 8)) then
+				local newpos = keep_inside_circle(x2, y2, ScrH() - (64 + 48 + 8))
+				x2 = newpos.x
+				y2 = newpos.y
+			end
+
+			if
+					(x2 >= x1 and x2 <= x1 + w1) or (x1 >= x2 and x1 <= x2 + w2) and
+					(y1 >= y2 and y1 <= y2 + h2) or (y2 >= y1 and y2 <= y1 + h1)
+			then
+				to_stack[#to_stack + 1] = data
+			else
+				to_render[#to_render + 1] = data
+			end
+		end
+
+		local new_to_render = {}
+		if #to_render > 1 and #to_stack > 0 then
+			for _, data in ipairs(to_render) do
+				local x1, y1, w1, h1 = data.x, data.y, data.w, data.h
+				local x2, y2, w2, h2
+
+				local add_to_new = true
+
+				local ay = 0
+				for j, other_data in ipairs(to_stack) do
+					h2 = other_data.h
+					local _y2 = other_data.y
+					x2, y2, w2 = other_data.x, ay, other_data.w
+					if j == 1 then y2 = _y2 end
+					if is_outside_circle((ScrW() / 2) - x2, (ScrH() / 2) - y2, ScrH() - (64 + 48 + 8)) then
+						local newpos = keep_inside_circle(x2, y2, ScrH() - (64 + 48 + 8))
+						x2 = newpos.x
+						y2 = newpos.y
+					end
+
+					if
+							(x2 >= x1 and x2 <= x1 + w1) or (x1 >= x2 and x1 <= x2 + w2) and
+							(y1 >= ay and y1 <= ay + h2) or (_y2 >= y1 and _y2 <= y1 + h1)
+					then
+						to_stack[#to_stack + 1] = data
+						add_to_new = false
+						break
+					end
+
+					ay = ay + _y2 + h2 + (th / 2)
+				end
+
+				if add_to_new then
+					new_to_render[#new_to_render + 1] = data
+				end
+			end
+		else
+			new_to_render = to_render
+		end
+
+		for _, data in ipairs(new_to_render) do
+			render_data(data)
+		end
+
+		local mindist, nexty = math.huge, -math.huge
+		for _, data in ipairs(to_stack) do
+			mindist, nexty = render_data(data, true, mindist, nexty)
 		end
 	end
 end)

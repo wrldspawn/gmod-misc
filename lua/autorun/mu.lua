@@ -311,9 +311,7 @@ _G.mu = setmetatable({}, META)
 
 local function strsim(str1, str2)
 	if str1:Trim() == "" or str2:Trim() == "" then return false end
-	if str1 == str2 or string.find(str1, str2) or string.find(str2, str1) then
-		return true
-	end
+	if string.find(str1, str2) or string.find(str2, str1) then return true end
 
 	return false
 end
@@ -336,12 +334,18 @@ local function find_ent(inp)
 
 	-- search entities
 	for _, ent in ents.Iterator() do
-		if strsim(inp, ent:GetClass():lower()) then
-			return ent
-		end
+		if ent:IsPlayer() then continue end
+		local class = ent:GetClass():lower()
+		inp = inp:lower()
 
-		if ent.GetName and strsim(inp, ent:GetName()) then
-			return ent
+		if inp == class then return ent end
+		if strsim(inp, class) then return ent end
+
+		if ent.GetName then
+			local name = ent:GetName()
+
+			if inp == name then return ent end
+			if strsim(inp, name) then return ent end
 		end
 	end
 	return NULL
@@ -379,7 +383,7 @@ local function mu_env(p)
 			if _G[k] ~= nil then return _G[k] end
 
 			local ent = find_ent(k)
-			if ent ~= NULL then return ent end
+			if ent:IsValid() then return ent end
 
 			return nil
 		end,

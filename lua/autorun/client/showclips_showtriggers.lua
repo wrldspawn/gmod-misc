@@ -138,7 +138,6 @@ local function collectClipBrushes()
 	end
 
 	-- this implementation is not perfect but it at least works
-	-- (theres a weird ring on surf_adrift_fix, a lot of maps have brushes at origin)
 	local clipBrushes = {}
 	for _, brush in ipairs(brushes) do
 		local planes = {}
@@ -196,7 +195,15 @@ end
 
 local trigger_info = {}
 local point_triggers = {}
-local POINT_TYPES = { "point_trigger", "point_vehiclespawn", "point_hurt", "point_teleport", "point_weapon_eater" }
+
+local POINT_TYPES = {
+	"point_trigger",
+	"point_vehiclespawn",
+	"point_hurt",
+	"point_teleport",
+	"point_weapon_eater",
+	"point_push"
+}
 
 local function collectTriggerBrushes()
 	local triggerBrushes = {}
@@ -246,8 +253,8 @@ local function collectTriggerBrushes()
 			origin = trigger.origin,
 			mins = bmodel.mins,
 			maxs = bmodel.maxs,
+			speed = trigger.speed or trigger.magnitude,
 			disabled = tobool(trigger.startdisabled ~= nil and trigger.startdisabled or trigger.StartDisabled),
-			speed = trigger.speed,
 			outputs = {},
 		}
 		for k, v in next, trigger do
@@ -300,9 +307,15 @@ local function collectTriggerBrushes()
 				maxs = Vector(1, 1, 1) * radius,
 				radius = radius,
 				once = tobool(trigger.TriggerOnce),
+				speed = trigger.speed or trigger.magnitude,
 				disabled = tobool(trigger.startdisabled ~= nil and trigger.startdisabled or trigger.StartDisabled),
 				outputs = {},
 			}
+
+			if trigger.enabled ~= nil and not tobool(trigger.enabled) then
+				info.disabled = true
+			end
+
 			for k, v in next, trigger do
 				if not string.match(k, "^On") then continue end
 				info.outputs[k] = v
@@ -514,7 +527,7 @@ local function classify_trigger(brush)
 				end
 			end
 		end
-	elseif classname == "trigger_push" then
+	elseif classname == "trigger_push" or classname == "point_push" then
 		type = TYPE_SPEED
 	elseif classname == "trigger_teleport" or classname == "point_teleport" then
 		type = TYPE_TELEPORT
@@ -722,6 +735,7 @@ local COLOR_OUTPUT = Color(0, 192, 255)
 local COLOR_DEST = Color(255, 128, 0)
 local COLOR_INVALID = Color(255, 0, 0)
 local COLOR_FILTER = Color(231, 16, 148)
+local COLOR_FIELD = Color(192, 192, 192) -- temp color?
 
 local developer = GetConVar("developer")
 local ANGLE_ZERO = Angle()
@@ -798,6 +812,9 @@ hook.Add("HUDPaint", "showtriggers", function()
 					addLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
 				end
 			end
+
+			addLine(lines, trigger.speed, "Speed: ", COLOR_FIELD, COLOR_TEXT)
+
 			addLine(lines, trigger.target, "Destination: ", COLOR_DEST, trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)
 
 			for on, outputs in next, trigger.outputs do
