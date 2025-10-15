@@ -1,5 +1,7 @@
 if not NikNaks then pcall(require, "niknaks") end
 if not NikNaks then return end
+if not picktext then pcall(require, "picktext") end
+if not picktext then return end
 
 -- hack for triggers cause i dont feel like making a pr
 local function getupvalues(f)
@@ -689,46 +691,6 @@ hook.Add("PostDrawTranslucentRenderables", "showclips", function(depth, skybox, 
 	end
 end)
 
--- i was told to yoink this from oc for offscreen text :^)
-local function keep_inside_circle(x, y, r)
-	local A = {
-		x = ScrW() / 2,
-		y = ScrH() / 2
-	}
-	local B = {
-		x = x,
-		y = y
-	}
-	local C = {}
-
-	C.x = A.x + (r / 2 * ((B.x - A.x) / math.sqrt(math.pow(B.x - A.x, 2) + math.pow(B.y - A.y, 2))))
-	C.y = A.y + (r / 2 * ((B.y - A.y) / math.sqrt(math.pow(B.x - A.x, 2) + math.pow(B.y - A.y, 2))))
-
-	return C
-end
-
-local function is_outside_circle(x, y, r)
-	return x ^ 2 + y ^ 2 > (r / 2) ^ 2
-end
-
-local function addLine(lines, text, prefix, pColor, color)
-	if lines.longest == nil then lines.longest = 0 end
-	if not text then return end
-
-	local str = prefix .. text
-	local tw = surface.GetTextSize(str)
-	if tw > lines.longest then
-		lines.longest = tw
-	end
-
-	lines[#lines + 1] = {
-		text = text,
-		prefix = prefix,
-		pColor = pColor,
-		color = color,
-	}
-end
-
 local COLOR_TEXT = Color(255, 255, 255)
 local COLOR_NAME = Color(0, 192, 0)
 local COLOR_OUTPUT = Color(0, 192, 255)
@@ -761,7 +723,6 @@ hook.Add("HUDPaint", "showtriggers", function()
 			return a.distance < b.distance
 		end)
 
-		local mindist, nexty = math.huge, -math.huge
 		for _, trigger in ipairs(to_render) do
 			local center = trigger.origin:ToScreen()
 
@@ -781,11 +742,11 @@ hook.Add("HUDPaint", "showtriggers", function()
 			end
 
 			local lines = {}
-			addLine(lines, trigger.class, "", COLOR_TEXT, COLOR_TEXT)
+			picktext.AddLine(lines, trigger.class, "", COLOR_TEXT, COLOR_TEXT)
 			if trigger.disabled then
-				addLine(lines, "Starts Disabled", "", COLOR_INVALID, COLOR_INVALID)
+				picktext.AddLine(lines, "Starts Disabled", "", COLOR_INVALID, COLOR_INVALID)
 			end
-			addLine(lines, trigger.name, "Name: ", COLOR_NAME, COLOR_TEXT)
+			picktext.AddLine(lines, trigger.name, "Name: ", COLOR_NAME, COLOR_TEXT)
 			if trigger.filter then
 				local filter = filter_cache[trigger.filter]
 				if not filter then
@@ -807,60 +768,28 @@ hook.Add("HUDPaint", "showtriggers", function()
 					end
 				end
 				if filter == false then
-					addLine(lines, trigger.filter, "Filter: ", COLOR_FILTER, COLOR_INVALID)
+					picktext.AddLine(lines, trigger.filter, "Filter: ", COLOR_FILTER, COLOR_INVALID)
 				else
-					addLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
+					picktext.AddLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
 				end
 			end
 
-			addLine(lines, trigger.speed, "Speed: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, trigger.speed, "Speed: ", COLOR_FIELD, COLOR_TEXT)
 
-			addLine(lines, trigger.target, "Destination: ", COLOR_DEST, trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)
+			picktext.AddLine(lines, trigger.target, "Destination: ", COLOR_DEST,
+				trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)
 
 			for on, outputs in next, trigger.outputs do
 				if isstring(outputs) then
-					addLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+					picktext.AddLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 				else
 					for _, output in ipairs(outputs) do
-						addLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						picktext.AddLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 					end
 				end
 			end
 
-			local _, th = surface.GetTextSize("W")
-
-			local w = lines.longest / 2
-			local h = th * (#lines / 2)
-			local x = center.x - w
-			local y = center.y - h
-
-			if nexty > y then y = nexty end
-
-			if is_outside_circle((ScrW() / 2) - x, (ScrH() / 2) - y, ScrH() - (64 + 48 + 8)) then
-				local newpos = keep_inside_circle(x, y, ScrH() - (64 + 48 + 8))
-				x = newpos.x
-				y = newpos.y
-			end
-
-			surface.SetDrawColor(255, 255, 255, 96)
-			surface.DrawLine(center.x, center.y, x + w, y + h)
-
-			for _, line in ipairs(lines) do
-				surface.SetTextColor(line.pColor:Unpack())
-				surface.SetTextPos(x, y)
-				surface.DrawText(line.prefix)
-				surface.SetTextColor(line.color:Unpack())
-				surface.DrawText(line.text)
-				y = y + th
-			end
-
-			local _x, _y = x - center.x, y - center.y
-			local dist = _x * _x + _y * _y * th
-
-			if dist < mindist then
-				mindist = dist
-			end
-			nexty = y + (th / 2)
+			picktext.AddBlock(lines, center.x, center.y)
 		end
 	end
 end)

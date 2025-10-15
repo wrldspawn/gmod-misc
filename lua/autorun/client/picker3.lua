@@ -1,3 +1,6 @@
+if not picktext then pcall(require, "picktext") end
+if not picktext then return end
+
 local TAG = "picker3"
 
 local ipairs = ipairs
@@ -10,8 +13,6 @@ local Format = Format
 local IsValid = IsValid
 local LocalPlayer = LocalPlayer
 local LocalToWorld = LocalToWorld
-local ScrH = ScrH
-local ScrW = ScrW
 local Vector = Vector
 local TEXFILTER_POINT = TEXFILTER.POINT
 
@@ -27,16 +28,10 @@ local surface_GetTextSize = surface.GetTextSize
 local surface_SetDrawColor = surface.SetDrawColor
 local surface_DrawLine = surface.DrawLine
 local surface_SetFont = surface.SetFont
-local surface_SetTextColor = surface.SetTextColor
-local surface_SetTextPos = surface.SetTextPos
-local surface_DrawText = surface.DrawText
 local surface_SetMaterial = surface.SetMaterial
 local surface_DrawTexturedRect = surface.DrawTexturedRect
 local table_sort = table.sort
 local util_IntersectRayWithOBB = util.IntersectRayWithOBB
-
-local COLOR = FindMetaTable("Color")
-local Color_Unpack = COLOR.Unpack
 
 local ANGLE = FindMetaTable("Angle")
 local Angle_Forward = ANGLE.Forward
@@ -230,6 +225,7 @@ local function GetMapEnts()
 		local ParseEntity = getupvalues(parseEntityData).ParseEntity
 		local _tableTypes = getupvalues(ParseEntity)._tableTypes
 		_tableTypes.OnHitMax = true
+		_tableTypes.OutValue = true
 		NikNaks.CurrentMap._entities = nil
 
 		MAP = NikNaks.CurrentMap
@@ -252,6 +248,8 @@ local function GetMapEnts()
 				color = ent.color or ent._light,
 				text = ent.text or ent.message,
 				target = ent.target or ent.landmark or ent.attach1 or ent.entitytemplate,
+				startvalue = ent.startvalue or ent.InitialValue,
+				compvalue = ent.CompareValue,
 				disabled = tobool(ent.startdisabled ~= nil and ent.startdisabled or ent.StartDisabled),
 				outputs = {},
 			}
@@ -298,7 +296,7 @@ local function GetMapEnts()
 			end
 
 			for k, v in next, ent do
-				if not string.match(k, "^On") then continue end
+				if not string.match(k, "^On") and k ~= "OutValue" then continue end
 				info.outputs[k] = v
 			end
 
@@ -340,45 +338,6 @@ concommand.Add(TAG, function()
 	LocalPlayer():ChatPrint("Picker " .. (PICKER_ENABLED and "en" or "dis") .. "abled.")
 end)
 
-local function keep_inside_circle(x, y, r)
-	local A = {
-		x = ScrW() / 2,
-		y = ScrH() / 2
-	}
-	local B = {
-		x = x,
-		y = y
-	}
-	local C = {}
-
-	C.x = A.x + (r / 2 * ((B.x - A.x) / math.sqrt(math.pow(B.x - A.x, 2) + math.pow(B.y - A.y, 2))))
-	C.y = A.y + (r / 2 * ((B.y - A.y) / math.sqrt(math.pow(B.x - A.x, 2) + math.pow(B.y - A.y, 2))))
-
-	return C
-end
-
-local function is_outside_circle(x, y, r)
-	return x ^ 2 + y ^ 2 > (r / 2) ^ 2
-end
-
-local function addLine(lines, text, prefix, pColor, color)
-	if lines.longest == nil then lines.longest = 0 end
-	if not text then return end
-
-	local str = prefix .. text
-	local tw = surface_GetTextSize(str)
-	if tw > lines.longest then
-		lines.longest = tw
-	end
-
-	lines[#lines + 1] = {
-		text = text,
-		prefix = prefix,
-		pColor = pColor,
-		color = color,
-	}
-end
-
 local COLOR_TEXT = Color(255, 255, 255)
 local COLOR_NAME = Color(0, 192, 0)
 local COLOR_OUTPUT = Color(0, 192, 255)
@@ -404,83 +363,9 @@ end
 
 local lply = LocalPlayer()
 
-local SCROLL_ENABLED = false
-local SCROLL_ENABLED_LAST = false
-local SCROLL_OFFSET = 0
-
-hook.Add("PlayerBindPress", TAG, function(ply, bind, pressed, code)
-	if SCROLL_ENABLED and pressed and (code == MOUSE_WHEEL_UP or code == MOUSE_WHEEL_DOWN) then
-		surface_SetFont("BudgetLabel")
-		local _, th = surface_GetTextSize("W")
-
-
-		if code == MOUSE_WHEEL_UP then
-			SCROLL_OFFSET = SCROLL_OFFSET - th
-			if SCROLL_OFFSET < 0 then SCROLL_OFFSET = 0 end
-		else
-			SCROLL_OFFSET = SCROLL_OFFSET + th
-		end
-
-		return true
-	end
-end)
-
-local function render_data(data, stacking, mindist, nexty)
-	surface_SetFont("BudgetLabel")
-	local _, th = surface_GetTextSize("W")
-
-	local x, y, w, h, cx, cy = data.x, data.y, data.w, data.h, data.cx, data.cy
-
-	if stacking and nexty > y then y = nexty end
-
-	local offset = stacking and SCROLL_OFFSET or 0
-
-	local contain = true
-	if stacking then
-		contain = not SCROLL_ENABLED
-	end
-	if contain and is_outside_circle((ScrW() / 2) - x, (ScrH() / 2) - y, ScrH() - (64 + 48 + 8)) then
-		local newpos = keep_inside_circle(x, y, ScrH() - (64 + 48 + 8))
-		x = newpos.x
-		y = newpos.y
-	end
-
-	surface_SetDrawColor(255, 255, 255, 96)
-	surface_DrawLine(cx, cy, x + w, (y - offset) + h)
-
-	for _, line in ipairs(data.lines) do
-		surface_SetTextColor(Color_Unpack(line.pColor))
-		surface_SetTextPos(x, y - offset)
-		surface_DrawText(line.prefix)
-		surface_SetTextColor(Color_Unpack(line.color))
-		surface_DrawText(line.text)
-		y = y + th
-	end
-
-	if stacking then
-		local _x, _y = x - cx, y - cy
-		local dist = _x * _x + _y * _y * th
-
-		if dist < mindist then
-			mindist = dist
-		end
-		nexty = y + (th / 2)
-		return mindist, nexty
-	end
-end
-
 hook.Add("HUDPaint", TAG, function()
 	if PICKER_ENABLED then
-		SCROLL_ENABLED_LAST = SCROLL_ENABLED
-		SCROLL_ENABLED = input.IsKeyDown(KEY_LALT)
-		if SCROLL_ENABLED_LAST and not SCROLL_ENABLED then
-			SCROLL_OFFSET = 0
-		end
-
 		local to_process = {}
-		local processed = {}
-		local to_render = {}
-		local to_stack = {}
 		local axes = {}
 
 		if not IsValid(lply) then
@@ -630,12 +515,12 @@ hook.Add("HUDPaint", TAG, function()
 			local center = pos:ToScreen()
 
 			local lines = {}
-			addLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
+			picktext.AddLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
 			if ent.disabled then
-				addLine(lines, "Starts Disabled", "", COLOR_INVALID, COLOR_INVALID)
+				picktext.AddLine(lines, "Starts Disabled", "", COLOR_INVALID, COLOR_INVALID)
 			end
 
-			addLine(lines, ent.name, "Name: ", COLOR_NAME, COLOR_TEXT)
+			picktext.AddLine(lines, ent.name, "Name: ", COLOR_NAME, COLOR_TEXT)
 
 			local is_filter = ent.class:find("^filter_")
 			if ent.filter and MAP and not is_filter then
@@ -659,15 +544,15 @@ hook.Add("HUDPaint", TAG, function()
 					end
 				end
 				if filter == false then
-					addLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_INVALID)
+					picktext.AddLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_INVALID)
 				else
-					addLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
+					picktext.AddLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
 				end
 			elseif is_filter then
-				addLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
+				picktext.AddLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
 			end
 
-			addLine(lines, ent.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, ent.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
 			if ent.texture then
 				if decal_cache[ent.texture] == nil then
 					local path = "materials/" .. ent.texture
@@ -676,145 +561,47 @@ hook.Add("HUDPaint", TAG, function()
 					end
 					decal_cache[ent.texture] = file.Exists(path, "GAME")
 				end
-				addLine(lines, ent.texture, "Texture: ", COLOR_FIELD, decal_cache[ent.texture] and COLOR_TEXT or COLOR_INVALID)
+				picktext.AddLine(lines, ent.texture, "Texture: ", COLOR_FIELD,
+					decal_cache[ent.texture] and COLOR_TEXT or COLOR_INVALID)
 			end
 			if ent.color then
 				local col = Color(unpack(string_Explode(" ", ent.color)))
 				col.a = 255
-				addLine(lines, ent.color, "Color: ", COLOR_FIELD, col)
+				picktext.AddLine(lines, ent.color, "Color: ", COLOR_FIELD, col)
 			end
 
 			local posStr = Format(FORMAT_3, Vector_Unpack(pos))
-			addLine(lines, posStr, "Position: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, COLOR_TEXT)
 
 			if ent.angle then
 				local angle = Format(FORMAT_3, Angle_Unpack(ang))
-				addLine(lines, angle, "Angle: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, angle, "Angle: ", COLOR_FIELD, COLOR_TEXT)
 			end
 
 			if not ent.bounds_fallback then
 				local mins = Format(FORMAT_3, Vector_Unpack(ent.mins))
 				local maxs = Format(FORMAT_3, Vector_Unpack(ent.maxs))
-				addLine(lines, maxs, "Maxs: ", COLOR_FIELD, COLOR_TEXT)
-				addLine(lines, mins, "Mins: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, maxs, "Maxs: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, mins, "Mins: ", COLOR_FIELD, COLOR_TEXT)
 			end
 
-			addLine(lines, ent.text, "Text: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, ent.text, "Text: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, ent.startvalue, "Starting Value: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, ent.compvalue, "Compare Value: ", COLOR_FIELD, COLOR_TEXT)
 
-			addLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
+			picktext.AddLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
 
 			for on, outputs in next, ent.outputs do
 				if isstring(outputs) then
-					addLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+					picktext.AddLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 				else
 					for _, output in ipairs(outputs) do
-						addLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						picktext.AddLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 					end
 				end
 			end
 
-			local w = lines.longest / 2
-			local h = th * (#lines / 2)
-			local x = center.x - w
-			local y = center.y - h
-
-			local data = {
-				x = x,
-				y = y,
-				w = w,
-				h = h,
-				cx = center.x,
-				cy = center.y,
-				lines = lines,
-			}
-
-			processed[#processed + 1] = data
-		end
-
-		for i, data in ipairs(processed) do
-			if #processed == 1 then
-				to_render[#to_render + 1] = data
-				break
-			end
-
-			local x1, y1, w1, h1 = data.x, data.y, data.w, data.h
-			local x2, y2, w2, h2
-			if i == 1 then
-				local next_data = processed[2]
-				x2, y2, w2, h2 = next_data.x, next_data.y, next_data.w, next_data.h
-			else
-				local prev_data = processed[i - 1]
-				x2, y2, w2, h2 = prev_data.x, prev_data.y, prev_data.w, prev_data.h
-			end
-
-			if is_outside_circle((ScrW() / 2) - x1, (ScrH() / 2) - y1, ScrH() - (64 + 48 + 8)) then
-				local newpos = keep_inside_circle(x1, y1, ScrH() - (64 + 48 + 8))
-				x1 = newpos.x
-				y1 = newpos.y
-			end
-			if is_outside_circle((ScrW() / 2) - x2, (ScrH() / 2) - y2, ScrH() - (64 + 48 + 8)) then
-				local newpos = keep_inside_circle(x2, y2, ScrH() - (64 + 48 + 8))
-				x2 = newpos.x
-				y2 = newpos.y
-			end
-
-			if
-					(x2 >= x1 and x2 <= x1 + w1) or (x1 >= x2 and x1 <= x2 + w2) and
-					(y1 >= y2 and y1 <= y2 + h2) or (y2 >= y1 and y2 <= y1 + h1)
-			then
-				to_stack[#to_stack + 1] = data
-			else
-				to_render[#to_render + 1] = data
-			end
-		end
-
-		local new_to_render = {}
-		if #to_render > 1 and #to_stack > 0 then
-			for _, data in ipairs(to_render) do
-				local x1, y1, w1, h1 = data.x, data.y, data.w, data.h
-				local x2, y2, w2, h2
-
-				local add_to_new = true
-
-				local ay = 0
-				for j, other_data in ipairs(to_stack) do
-					h2 = other_data.h
-					local _y2 = other_data.y
-					x2, y2, w2 = other_data.x, ay, other_data.w
-					if j == 1 then y2 = _y2 end
-					if is_outside_circle((ScrW() / 2) - x2, (ScrH() / 2) - y2, ScrH() - (64 + 48 + 8)) then
-						local newpos = keep_inside_circle(x2, y2, ScrH() - (64 + 48 + 8))
-						x2 = newpos.x
-						y2 = newpos.y
-					end
-
-					if
-							(x2 >= x1 and x2 <= x1 + w1) or (x1 >= x2 and x1 <= x2 + w2) and
-							(y1 >= ay and y1 <= ay + h2) or (_y2 >= y1 and _y2 <= y1 + h1)
-					then
-						to_stack[#to_stack + 1] = data
-						add_to_new = false
-						break
-					end
-
-					ay = ay + _y2 + h2 + (th / 2)
-				end
-
-				if add_to_new then
-					new_to_render[#new_to_render + 1] = data
-				end
-			end
-		else
-			new_to_render = to_render
-		end
-
-		for _, data in ipairs(new_to_render) do
-			render_data(data)
-		end
-
-		local mindist, nexty = math.huge, -math.huge
-		for _, data in ipairs(to_stack) do
-			mindist, nexty = render_data(data, true, mindist, nexty)
+			picktext.AddBlock(lines, center.x, center.y)
 		end
 	end
 end)
