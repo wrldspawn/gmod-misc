@@ -16,7 +16,7 @@ local function pack(...)
 		__index = function(self, key)
 			return f[key] or tbl[key]
 		end,
-		_call = function()
+		__call = function()
 			return len, tbl
 		end
 	})
@@ -351,30 +351,30 @@ local function find_ent(inp)
 	return NULL
 end
 
-local function mu_env(p)
+local function mu_env(ply)
 	local mu = _G.mu
-	if CLIENT and not p then p = LocalPlayer() end
-	if not (IsValid(p) and isentity(p) and p:IsPlayer()) then return end
+	if CLIENT and not ply then ply = LocalPlayer() end
+	if not (IsValid(ply) and isentity(ply) and ply:IsPlayer()) then return end
 
-	local tr = p:GetEyeTrace()
+	local tr = ply:GetEyeTrace()
 
 	local tbl = {
-		me = p,
-		wep = p:GetActiveWeapon(),
+		me = ply,
+		wep = ply:GetActiveWeapon(),
 		trace = tr,
 		tr = tr,
 		this = tr.Entity,
 		model = tr.Entity:IsValid() and tr.Entity:GetModel() or "",
 		there = tr.HitPos,
-		here = p:GetPos(),
+		here = ply:GetPos(),
 		those = mu(ents.FindInSphere(tr.HitPos, 512)),
 		hooks = hook.GetTable(),
-		us = mu(ents.FindInSphere(p:GetPos(), 256)):filter("e->e:IsPlayer()"),
+		us = mu(ents.FindInSphere(ply:GetPos(), 256)):filter("e->e:IsPlayer()"),
 		all = mu.p(),
 		allof = mu.e.c,
 		named = mu.e.n,
 	}
-	if SERVER then
+	if SERVER and IsValid(tr.Entity) then
 		tbl.these = mu(constraint.GetAllConstrainedEntities(tr.Entity))
 	end
 

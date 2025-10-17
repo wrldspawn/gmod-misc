@@ -44,14 +44,68 @@ local Vector_Distance = VECTOR.Distance
 local Vector_ToScreen = VECTOR.ToScreen
 local Vector_Unpack = VECTOR.Unpack
 
+local BOUNDS = 8
+local ANGLE_ZERO = Angle()
+local VEC_ZERO = Vector()
+local VEC_FORWARD = Vector(BOUNDS, 0, 0)
+local VEC_LEFT = Vector(0, BOUNDS, 0)
+local VEC_UP = Vector(0, 0, BOUNDS)
+
+if picker3_axis_mesh and picker3_axis_mesh:IsValid() then
+	picker3_axis_mesh:Destroy()
+end
+if picker3_axis_inactive_mesh and picker3_axis_inactive_mesh:IsValid() then
+	picker3_axis_inactive_mesh:Destroy()
+end
+
+do -- axis mesh
+	for i = 1, 2 do
+		local a = i == 2 and 72 or 255
+
+		local obj = Mesh()
+		mesh.Begin(obj, MATERIAL_LINES, 6)
+
+		mesh.Color(255, 0, 0, a)
+		mesh.Position(VEC_ZERO)
+		mesh.AdvanceVertex()
+		mesh.Color(255, 0, 0, a)
+		mesh.Position(VEC_FORWARD)
+		mesh.AdvanceVertex()
+
+		mesh.Color(0, 255, 0, a)
+		mesh.Position(VEC_ZERO)
+		mesh.AdvanceVertex()
+		mesh.Color(0, 255, 0, a)
+		mesh.Position(VEC_LEFT)
+		mesh.AdvanceVertex()
+
+		mesh.Color(0, 0, 255, a)
+		mesh.Position(VEC_ZERO)
+		mesh.AdvanceVertex()
+		mesh.Color(0, 0, 255, a)
+		mesh.Position(VEC_UP)
+		mesh.AdvanceVertex()
+		mesh.End()
+
+		if i == 2 then
+			picker3_axis_inactive_mesh = obj
+		else
+			picker3_axis_mesh = obj
+		end
+	end
+end
+
+picker3_meshes = picker3_meshes or {}
+for _, obj in pairs(picker3_meshes) do
+	if obj:IsValid() then obj:Destroy() end
+end
+
 local ENTITIES = setmetatable({}, { __mode = "k" })
 local MAP_ENTS = {}
 
 hook.Add("EntityRemoved", TAG, function(ent)
 	ENTITIES[ent] = nil
 end)
-
-local BOUNDS = 8
 
 local function CreateIcon(class, path)
 	return CreateMaterial("picker3_icon-" .. class, "UnlitGeneric", {
@@ -88,6 +142,7 @@ local ENT_ICONS = {
 	game_score = Material("icon16/table_add.png"),
 	info_ladder_dismount = ICON_TARGET,
 	info_target = ICON_TARGET,
+	info_teleport_destination = ICON_TARGET,
 	info_waypoint = Material("icon16/exclamation.png"),
 	infodecal = Material("icon16/image.png"),
 	keyframe_rope = ICON_VECTOR,
@@ -209,6 +264,66 @@ end
 
 local MAP
 
+local function dedupe(verts)
+	local dedupedVerts = {}
+	for _, v1 in ipairs(verts) do
+		local exists = false
+		for _, v2 in ipairs(dedupedVerts) do
+			local sub = v1 - v2
+			if sub:LengthSqr() < 0.001 then
+				exists = true
+				break
+			end
+		end
+
+		if not exists then
+			dedupedVerts[#dedupedVerts + 1] = v1
+		end
+	end
+
+	return dedupedVerts
+end
+local function create_bmodel_mesh(bmodel, idx)
+	local faces = bmodel:GetFaces()
+
+	local brush_verts = {}
+
+	for _, face in ipairs(faces) do
+		local verts = face:GenerateVertexTriangleData()
+		local side = {}
+		for _, vert in ipairs(verts) do
+			side[#side + 1] = vert.pos
+		end
+		brush_verts[#brush_verts + 1] = side
+	end
+
+	local vertCount = 0
+	local newBrush = {}
+	for _, side in ipairs(brush_verts) do
+		newBrush[#newBrush + 1] = dedupe(side)
+		vertCount = vertCount + #side
+	end
+
+	local obj = Mesh()
+	mesh.Begin(obj, MATERIAL_LINES, vertCount)
+	for _, side in ipairs(newBrush) do
+		for j, vert in ipairs(side) do
+			mesh.Color(255, 128, 0, 255)
+			mesh.Position(vert)
+			mesh.AdvanceVertex()
+
+			local nextVert = side[j + 1 % #side]
+			if not nextVert then nextVert = side[1] end
+			mesh.Color(255, 128, 0, 255)
+			mesh.Position(nextVert)
+			mesh.AdvanceVertex()
+		end
+	end
+	mesh.End()
+
+	picker3_meshes[idx] = obj
+end
+
 -- handled by showtriggers
 local IGNORE = {
 	point_hurt = true,
@@ -256,10 +371,13 @@ local function GetMapEnts()
 
 			if ent.model then
 				if ent.model:find("^%*") then
-					local bmodel = bmodels[tonumber(ent.model:sub(2))]
+					local bmidx = tonumber(ent.model:sub(2))
+					local bmodel = bmodels[bmidx]
 					if bmodel then
 						info.mins = bmodel.mins
 						info.maxs = bmodel.maxs
+
+						create_bmodel_mesh(bmodel, bmidx)
 					end
 				elseif ent.model:find("%.mdl$") then
 					local mdlinfo = util.GetModelInfo(ent.model)
@@ -346,12 +464,6 @@ local COLOR_INVALID = Color(255, 0, 0)
 local COLOR_FILTER = Color(231, 16, 148)
 local COLOR_FIELD = Color(192, 192, 192) -- temp color?
 
-local ANGLE_ZERO = Angle()
-local VEC_ZERO = Vector()
-local VEC_FORWARD = Vector(BOUNDS, 0, 0)
-local VEC_LEFT = Vector(0, BOUNDS, 0)
-local VEC_UP = Vector(0, 0, BOUNDS)
-
 local FORMAT_3 = "%.2f, %.2f, %.2f"
 
 local filter_cache = {}
@@ -362,11 +474,13 @@ local function sortdist(a, b)
 end
 
 local lply = LocalPlayer()
+local MATRIX = Matrix()
 
 hook.Add("HUDPaint", TAG, function()
 	if PICKER_ENABLED then
 		local to_process = {}
 		local axes = {}
+		local has_hit = false
 
 		if not IsValid(lply) then
 			lply = LocalPlayer()
@@ -404,6 +518,7 @@ hook.Add("HUDPaint", TAG, function()
 			if hitpos ~= nil then
 				to_process[#to_process + 1] = ent
 				axis.hit = true
+				has_hit = true
 			end
 
 			axes[#axes + 1] = axis
@@ -468,43 +583,63 @@ hook.Add("HUDPaint", TAG, function()
 
 				to_process[#to_process + 1] = info
 				axis.hit = true
+				has_hit = true
 			end
 
 			axes[#axes + 1] = axis
 		end
 
-		for _, axis in ipairs(axes) do
-			local pos = axis.pos
-			local ang = axis.ang
+		if false then
+			for _, axis in ipairs(axes) do
+				local pos = axis.pos
+				local ang = axis.ang
 
-			local spos = Vector_ToScreen(pos)
-			if not spos.visible then continue end
+				local spos = Vector_ToScreen(pos)
+				if not spos.visible then continue end
 
-			local alpha = axis.hit and 255 or 72
-			if #to_process == 0 then
-				alpha = 255
+				local alpha = axis.hit and 255 or 72
+				if #to_process == 0 then
+					alpha = 255
+				end
+
+				local pos_forward = LocalToWorld(VEC_FORWARD, ANGLE_ZERO, pos, ang)
+				local pos_left = LocalToWorld(VEC_LEFT, ANGLE_ZERO, pos, ang)
+				local pos_up = LocalToWorld(VEC_UP, ANGLE_ZERO, pos, ang)
+
+				local spos_f = Vector_ToScreen(pos_forward)
+				local spos_l = Vector_ToScreen(pos_left)
+				local spos_u = Vector_ToScreen(pos_up)
+
+				surface_SetDrawColor(255, 0, 0, alpha)
+				surface_DrawLine(spos.x, spos.y, spos_f.x, spos_f.y)
+				surface_SetDrawColor(0, 255, 0, alpha)
+				surface_DrawLine(spos.x, spos.y, spos_l.x, spos_l.y)
+				surface_SetDrawColor(0, 0, 255, alpha)
+				surface_DrawLine(spos.x, spos.y, spos_u.x, spos_u.y)
 			end
-
-			local pos_forward = LocalToWorld(VEC_FORWARD, ANGLE_ZERO, pos, ang)
-			local pos_left = LocalToWorld(VEC_LEFT, ANGLE_ZERO, pos, ang)
-			local pos_up = LocalToWorld(VEC_UP, ANGLE_ZERO, pos, ang)
-
-			local spos_f = Vector_ToScreen(pos_forward)
-			local spos_l = Vector_ToScreen(pos_left)
-			local spos_u = Vector_ToScreen(pos_up)
-
-			surface_SetDrawColor(255, 0, 0, alpha)
-			surface_DrawLine(spos.x, spos.y, spos_f.x, spos_f.y)
-			surface_SetDrawColor(0, 255, 0, alpha)
-			surface_DrawLine(spos.x, spos.y, spos_l.x, spos_l.y)
-			surface_SetDrawColor(0, 0, 255, alpha)
-			surface_DrawLine(spos.x, spos.y, spos_u.x, spos_u.y)
 		end
 
-		table_sort(to_process, sortdist)
+		cam.Start3D()
+		for _, axis in ipairs(axes) do
+			local spos = Vector_ToScreen(axis.pos)
+			if not spos.visible then continue end
 
-		surface_SetFont("BudgetLabel")
-		local _, th = surface_GetTextSize("W")
+			local obj = has_hit and (axis.hit and picker3_axis_mesh or picker3_axis_inactive_mesh) or picker3_axis_mesh
+
+			MATRIX:Identity()
+			MATRIX:Translate(axis.pos)
+			MATRIX:Rotate(axis.ang)
+
+			render.SetColorMaterial()
+			cam.PushModelMatrix(MATRIX)
+			if obj and obj:IsValid() then
+				obj:Draw()
+			end
+			cam.PopModelMatrix()
+		end
+		cam.End3D()
+
+		table_sort(to_process, sortdist)
 
 		for _, ent in ipairs(to_process) do
 			local entity = ent.entity
@@ -611,6 +746,7 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 	if not PICKER_ENABLED then return end
 
 	local to_render = {}
+	local meshes = {}
 	local has_hit = false
 
 	local eyepos = EyePos()
@@ -619,29 +755,40 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 	local forward = fwd * 32768
 
 	for _, ent in ipairs(MAP_ENTS) do
-		if ent.model ~= nil then continue end
+		local entity = ent.entity
+		local isvalid = IsValid(entity)
+		local pos = isvalid and entity:GetPos() or ent.origin
+		local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
 
-		local pos = ent.origin
-		local ang = ent.angle or ANGLE_ZERO
+		local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
 
 		local dist = Vector_Distance(eyepos, pos)
+		if dist > 32768 then continue end
+
+		local hit = hitpos ~= nil
+		has_hit = hit
+
+		if ent.model ~= nil then
+			if ent.model:find("^%*") and hitpos ~= nil then
+				local idx = tonumber(ent.model:sub(2))
+				local obj = picker3_meshes[idx]
+				if obj and obj:IsValid() then
+					meshes[#meshes + 1] = obj
+				end
+			end
+			continue
+		end
+
 		if dist > 512 then continue end
 
 		local spos = Vector_ToScreen(pos)
 		if not spos.visible then continue end
 
-		local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
-
 		local icon = {
 			class = ent.class,
 			pos = pos,
-			hit = false
+			hit = hit,
 		}
-
-		if hitpos ~= nil then
-			icon.hit = true
-			has_hit = true
-		end
 
 		to_render[#to_render + 1] = icon
 	end
@@ -670,5 +817,11 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		render_PopFilterMag()
 		render_SuppressEngineLighting(false)
 		cam_End3D2D()
+	end
+
+	render.SetColorMaterial()
+	for _, obj in ipairs(meshes) do
+		if not obj:IsValid() then continue end
+		obj:Draw()
 	end
 end)

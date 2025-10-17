@@ -3,6 +3,9 @@ if not NikNaks then return end
 if not picktext then pcall(require, "picktext") end
 if not picktext then return end
 
+local ANGLE_ZERO = Angle()
+local VECTOR_ZERO = Vector()
+
 -- hack for triggers cause i dont feel like making a pr
 local function getupvalues(f)
 	local i, t = 0, {}
@@ -102,8 +105,21 @@ end
 -- }}}
 
 local function collectClipBrushes()
+	local mapBrushes = MAP:GetBrushes()
+	local bsides = MAP:GetBrushSides()
+	local bmodels = MAP:GetBModels()
+
+	-- process brush sides a second time to get planenum
+	local lump = MAP:GetLump(19)
+	for i = 1, math.min(lump:Size() / 64, 163840) do
+		local planenum = lump:ReadUShort()
+		lump:Skip(48)
+		bsides[i - 1].__planenum = planenum
+	end
+	MAP:ClearLump(19)
+
 	local brushes = {}
-	for _, brush in ipairs(MAP:GetBrushes()) do
+	for _, brush in ipairs(mapBrushes) do
 		local invis = true
 		local sky = false
 		local nodraw = true
@@ -120,7 +136,9 @@ local function collectClipBrushes()
 			end
 		end
 
-		if invis == false and sky == false and nodraw == false and not (brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)) then continue end
+		local clip = brush:HasContents(CONTENTS_PLAYERCLIP) or brush:HasContents(CONTENTS_MONSTERCLIP)
+		if invis == false and sky == false and nodraw == false and not clip then continue end
+		if nodraw and not brush:HasContents(CONTENTS_SOLID) and not clip then continue end
 
 		if sky then
 			local skySides = {}
@@ -136,7 +154,39 @@ local function collectClipBrushes()
 		brush.invis = invis
 		brush.sky = sky
 		brush.nodraw = nodraw
+		brush.bmodel = nil
 		brushes[#brushes + 1] = brush
+	end
+
+	-- useless in its current state
+	if false then
+		for bi, bmodel in ipairs(bmodels) do
+			-- func_brushes that are made of clip brushes says 0 numfaces
+			if bmodel.numfaces == 0 then continue end
+
+			local faces = bmodel:GetFaces()
+
+			for _, brush in ipairs(brushes) do
+				local sidesWithMatchingPlanes = {}
+				for i = 1, brush.numsides do
+					local side = brush.sides[i]
+					local planenum = side.__planenum
+					if planenum == nil then continue end
+
+					for _, face in ipairs(faces) do
+						if face.planenum == planenum then
+							if face.plane == side.plane then
+								sidesWithMatchingPlanes[i] = true
+							end
+						end
+					end
+				end
+
+				if table.Count(sidesWithMatchingPlanes) == brush.numsides then
+					brush.bmodel = bi
+				end
+			end
+		end
 	end
 
 	-- this implementation is not perfect but it at least works
@@ -156,11 +206,25 @@ local function collectClipBrushes()
 
 			local points = {}
 
+			local offset = VECTOR_ZERO
+			local ang = ANGLE_ZERO
+
+			if brush.bmodel ~= nil then
+				local ent = MAP:FindByModel("*" .. brush.bmodel)[1]
+				if ent then
+					offset = ent.origin
+					ang = ent.angles or ANGLE_ZERO
+				end
+			end
+
 			for _, vert in ipairs(verts) do
 				local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
 				if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
 
-				points[#points + 1] = vert
+				local pos = vert + offset
+				pos:Rotate(ang)
+
+				points[#points + 1] = pos
 			end
 
 			-- sort them in clockwise order
@@ -225,7 +289,7 @@ local function collectTriggerBrushes()
 
 		if not bmodel then continue end
 
-		local faces = bmodels[model]:GetFaces()
+		local faces = bmodel:GetFaces()
 
 		local brush_verts = {}
 
@@ -440,6 +504,7 @@ local function generateClipMeshes()
 				-- this.
 				local nextVert = side[j + 1 % #side]
 				if not nextVert then nextVert = side[1] end
+				mesh.Color(r, g, b, 255)
 				mesh.Position(nextVert)
 				mesh.AdvanceVertex()
 			end
@@ -594,6 +659,7 @@ local function generateTriggerMeshes()
 
 				local nextVert = side[j + 1 % #side]
 				if not nextVert then nextVert = side[1] end
+				mesh.Color(col.r, col.g, col.b, 255)
 				mesh.Position(nextVert)
 				mesh.AdvanceVertex()
 			end
@@ -681,7 +747,6 @@ hook.Add("PostDrawTranslucentRenderables", "showclips", function(depth, skybox, 
 				obj:Draw()
 			end
 
-			render.SetColorMaterial()
 			for _, point in ipairs(point_triggers) do
 				local col = classify_trigger(point)
 				render.DrawSphere(point.pos, point.radius, 32, 16, ColorAlpha(col, 32))
@@ -700,7 +765,6 @@ local COLOR_FILTER = Color(231, 16, 148)
 local COLOR_FIELD = Color(192, 192, 192) -- temp color?
 
 local developer = GetConVar("developer")
-local ANGLE_ZERO = Angle()
 
 local filter_cache = {}
 
