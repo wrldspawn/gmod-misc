@@ -7,22 +7,38 @@ local _R = HolyLib.GetRegistry()
 
 ErrorVar.OriginalErrorHandler = ErrorVar.OriginalErrorHandler or _R[1]
 
+local function MsgN(...)
+	local args = { ... }
+	for i, v in ipairs(args) do
+		args[i] = tostring(v)
+	end
+
+	local str = table.concat(args, "")
+
+	if epoe then
+		epoe.api.error(str)
+		epoe.RealPrint(str)
+	else
+		print(str)
+	end
+end
+
 function ErrorVar.ErrorHandler(...)
-	local Level = 1
+	local Level = 2
 	local Info = debug.getinfo(Level)
 
 	while Info do
-		local Indent = string.rep("    ", Level - 1)
+		local Indent = string.rep("    ", Level - 2)
 		local Function = Info.func
 
 		if isfunction(Function) then
 			local FunctionName = Info.name or "[Unknown Function]"
 
-			print(Indent .. "Traces of level " .. tostring(Level) .. " (" .. FunctionName .. ")")
+			MsgN(Indent, "Traces of level ", Level, " (", FunctionName, ")")
 
 			for i = 1, Info.nups do
 				local Name, Value = debug.getupvalue(Function, i)
-				print(Indent .. "- UpValue " .. tostring(i) .. " (" .. Name .. ") (" .. type(Value) .. ") = " .. tostring(Value))
+				MsgN(Indent, "- UpValue ", i, " (", Name, ") (", type(Value), ") = ", Value)
 			end
 
 			local Local = 1
@@ -31,8 +47,7 @@ function ErrorVar.ErrorHandler(...)
 				local Name, Value = debug.getlocal(Level, Local)
 				if not Name then break end
 
-				print(Indent ..
-				"- Local " .. tostring(Local) .. " (" .. Name .. ") (" .. type(Value) .. ") = " .. tostring(Value))
+				MsgN(Indent, "- Local ", Local, " (", Name, ") (", type(Value), ") = ", Value)
 
 				Local = Local + 1
 			end

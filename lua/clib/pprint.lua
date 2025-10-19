@@ -277,8 +277,8 @@ do
 				end
 
 				-- Record color change
-				table_insert(markers, length)
-				table_insert(colors, color)
+				markers[#markers + 1] = length
+				colors[#colors + 1] = color
 			end
 		end
 
@@ -294,12 +294,12 @@ do
 			local from, to = string_find(str, '\n')
 
 			while from do
-				local frag = string_sub(str, last, from - 1)
-				local len  = from - last
+				local frag          = string_sub(str, last, from - 1)
+				local len           = from - last
 
 				-- Merge fragment to the line
-				length     = length + len
-				table_insert(buffer, frag)
+				length              = length + len
+				buffer[#buffer + 1] = frag
 
 				-- Print finished line
 				gCommit()
@@ -313,11 +313,11 @@ do
 			end
 
 			-- Push last fragment
-			local frag = string_sub(str, last)
-			local len  = string_len(str) - last + 1
+			local frag          = string_sub(str, last)
+			local len           = string_len(str) - last + 1
 
-			length     = length + len
-			table_insert(buffer, frag)
+			length              = length + len
+			buffer[#buffer + 1] = frag
 		else
 			-- Push immediately
 			MsgC(currColor or baseColor or COLOR_NEUTRAL, str)
@@ -898,13 +898,14 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 				local arg = 2
 				local last_arg = debug_getlocal(value, 1)
 				while last_arg ~= nil do
-					table_insert(args, last_arg)
+					args[#args + 1] = last_arg
 					last_arg = debug_getlocal(value, arg)
 					arg = arg + 1
 				end
 
-				gMsgF(table_concat(args, ", "))
-				strOut[#strOut + 1] = table_concat(args, ", ")
+				local argStr = table_concat(args, ", ")
+				gMsgF(argStr)
+				strOut[#strOut + 1] = argStr
 			end
 
 			if info.linedefined ~= info.lastlinedefined then
@@ -975,6 +976,25 @@ local function InternalPrintValue(value, shouldComment, shouldComma)
 		return table_concat(strOut, "")
 	end
 
+	-- threads
+	if type(value) == "thread" then
+		gMsgC(COLOR_GLOBAL)
+		gMsgF("thread")
+		strOut[#strOut + 1] = "thread"
+
+		gMsgC(COLOR_NEUTRAL)
+		local pointer = Format(": %p", value)
+		gMsgF(pointer)
+		strOut[#strOut + 1] = pointer
+
+		gMsgC(COLOR_COMMENT)
+		local status = " -- " .. coroutine.status(value)
+		gMsgF(status)
+		strOut[#strOut + 1] = status
+
+		return table_concat(strOut, "")
+	end
+
 	-- Workaround for userdata not using MetaName
 	if string_sub(tostring(value), 0, 8) == "userdata" then
 		local meta = getmetatable(value)
@@ -1016,7 +1036,7 @@ local function InternalPrintTable(table, path, prefix, names, todo, recursive)
 
 	for key, value in pairs(table) do
 		-- Add to key list for later sorting
-		table_insert(keyList, key)
+		keyList[#keyList + 1] = key
 
 		-- Describe key as string
 		if isstring(key) or isnumber(key) then
@@ -1485,21 +1505,23 @@ end
 -- because I don't feel like refactoring the entire thing
 local strResult
 local toStringMsgF = function(txt)
-	table_insert(strResult, txt)
+	strResult[#strResult + 1] = txt
 end
 
 local toStringMsgN = function()
-	table_insert(strResult, "\n")
+	strResult[#strResult + 1] = "\n"
 end
 
 local toStringMsgC = function(_, txt)
-	table_insert(strResult, txt)
+	strResult[#strResult + 1] = txt
 end
 
 local toStringMsgC2 = function(col, txt)
-	local outcol = ("\x0E%s\x0F"):format(tostring(col))
-	table_insert(strResult, outcol)
-	table_insert(strResult, txt)
+	if col then
+		local outcol = ("\x0E%s\x0F"):format(table.concat(col:ToTable(), " "))
+		strResult[#strResult + 1] = outcol
+	end
+	strResult[#strResult + 1] = txt
 end
 
 function toString(...)
