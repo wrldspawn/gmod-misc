@@ -12,17 +12,17 @@ function ErrorVar.ErrorHandler(...)
 	local Info = debug.getinfo(Level)
 
 	while Info do
-		local Indent = string.rep("\t", Level - 1)
+		local Indent = string.rep("    ", Level - 1)
 		local Function = Info.func
 
 		if isfunction(Function) then
 			local FunctionName = Info.name or "[Unknown Function]"
 
-			MsgN(Indent, "Traces of level ", Level, " (", FunctionName, ")")
+			print(Indent .. "Traces of level " .. tostring(Level) .. " (" .. FunctionName .. ")")
 
 			for i = 1, Info.nups do
 				local Name, Value = debug.getupvalue(Function, i)
-				MsgN(Indent, "- UpValue ", i, " (", Name, ") (", type(Value), ") = ", Value)
+				print(Indent .. "- UpValue " .. tostring(i) .. " (" .. Name .. ") (" .. type(Value) .. ") = " .. tostring(Value))
 			end
 
 			local Local = 1
@@ -31,7 +31,8 @@ function ErrorVar.ErrorHandler(...)
 				local Name, Value = debug.getlocal(Level, Local)
 				if not Name then break end
 
-				MsgN(Indent, "- Local ", Local, " (", Name, ") (", type(Value), ") = ", Value)
+				print(Indent ..
+				"- Local " .. tostring(Local) .. " (" .. Name .. ") (" .. type(Value) .. ") = " .. tostring(Value))
 
 				Local = Local + 1
 			end
