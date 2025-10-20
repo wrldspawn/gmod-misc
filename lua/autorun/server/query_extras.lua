@@ -35,6 +35,7 @@ hook.Add("A2S_PLAYER", TAG, function(ip, port)
 	local lowest = 0
 
 	local plys = {}
+	local _plys = {}
 
 	for _, ply in player.Iterator() do
 		local score = ply:Frags()
@@ -45,12 +46,12 @@ hook.Add("A2S_PLAYER", TAG, function(ip, port)
 			lowest = score
 		end
 
-		plys[#plys + 1] = { name = ply:Name(), score = score, time = ply:TimeConnected() }
+		_plys[#_plys + 1] = { name = ply:Name(), score = score, time = ply:TimeConnected() }
 	end
 
 	local i = 1
 	for _, data in pairs(queryextras_connecting) do
-		plys[#plys + 1] = { name = "[Connecting] " .. data.name, score = lowest - i, time = now - data.start }
+		_plys[#_plys + 1] = { name = "[Connecting] " .. data.name, score = lowest - i, time = now - data.start }
 		i = i + 1
 	end
 
@@ -59,6 +60,10 @@ hook.Add("A2S_PLAYER", TAG, function(ip, port)
 	plys[#plys + 1] = { name = "Server Uptime:", score = highest + 3, time = now }
 	plys[#plys + 1] = { name = "Map Uptime:", score = highest + 2, time = curtime }
 	plys[#plys + 1] = { name = "————————————", score = highest + 1, time = curtime - 1 }
+
+	for _, ply in ipairs(_plys) do
+		plys[#plys + 1] = ply
+	end
 
 	return plys
 end)
