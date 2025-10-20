@@ -1,5 +1,9 @@
-if not query then pcall(require, "query") end
-if not query then return end
+if not serversecure then pcall(require, "serversecure") end
+if not serversecure then return end
+if not serversecure.Version:find("serversecure%-playerquery") then
+	ErrorNoHalt("bad serversecure version for query_extras")
+	return
+end
 
 local TAG = "query_extras"
 
@@ -24,7 +28,6 @@ hook.Add("PlayerInitialSpawn", TAG, function(ply)
 	queryextras_connecting[ply:UserID()] = nil
 end)
 
---query.EnableInfoDetour(true)
 hook.Add("A2S_PLAYER", TAG, function(ip, port)
 	local now = SysTime()
 
