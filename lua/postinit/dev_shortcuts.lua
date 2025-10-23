@@ -36,7 +36,7 @@ do -- better tostrings
 
 		local str = Format("%s [%d]{Class=%q", prefix, self:EntIndex(), self:GetClass())
 
-		local name = self:GetName()
+		local name = self.GetName and self:GetName()
 		if name and name ~= "" then
 			str = str .. Format(", Name=%q", name)
 		end
