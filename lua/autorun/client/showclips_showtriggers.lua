@@ -422,7 +422,7 @@ table.Empty(showclips_clipMeshes)
 local function generateClipMeshes()
 	local clipBrushes = collectClipBrushes()
 
-	for _, brush in ipairs(clipBrushes) do
+	for i, brush in ipairs(clipBrushes) do
 		local contents = brush.contents
 		local r = 231
 		local g = 16
@@ -482,14 +482,15 @@ local function generateClipMeshes()
 		showclips_clipMeshes[#showclips_clipMeshes + 1] = obj
 
 		-- outline
-		local lineCount = 0
 		local newBrush = {}
-
 		for _, side in ipairs(brush) do
 			newBrush[#newBrush + 1] = dedupe(side)
 		end
-		for _, side in ipairs(newBrush) do
-			lineCount = lineCount + #side
+
+		local count = vertCount * 2
+		if count > 32768 then
+			print("[showclips] BRUSH TOO BIG TO OUTLINE", i, count .. " > 32768")
+			return
 		end
 
 		obj = Mesh()
@@ -639,27 +640,29 @@ local function generateTriggerMeshes()
 		showtriggers_triggerMeshes[#showtriggers_triggerMeshes + 1] = obj
 
 		-- outline
-		local lineCount = 0
 		local newBrush = {}
 		for _, side in ipairs(brush) do
 			newBrush[#newBrush + 1] = dedupe(side)
 		end
 
-		for _, side in ipairs(newBrush) do
-			lineCount = lineCount + #side
+		local count = vertCount * 2
+		if count > 32768 then
+			print("[showtriggers] TRIGGER TOO BIG TO OUTLINE", brush.model, brush.class, brush.origin, count .. " > 32768")
+			return
 		end
 
+		local r, g, b = col:Unpack()
 		obj = Mesh()
 		mesh.Begin(obj, MATERIAL_LINES, vertCount)
 		for _, side in ipairs(newBrush) do
 			for j, vert in ipairs(side) do
-				mesh.Color(col.r, col.g, col.b, 255)
+				mesh.Color(r, g, b, 255)
 				mesh.Position(vert)
 				mesh.AdvanceVertex()
 
 				local nextVert = side[j + 1 % #side]
 				if not nextVert then nextVert = side[1] end
-				mesh.Color(col.r, col.g, col.b, 255)
+				mesh.Color(r, g, b, 255)
 				mesh.Position(nextVert)
 				mesh.AdvanceVertex()
 			end

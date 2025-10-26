@@ -24,10 +24,8 @@ local render_PushFilterMin = render.PushFilterMin
 local render_PopFilterMag = render.PopFilterMag
 local render_PopFilterMin = render.PopFilterMin
 local string_Explode = string.Explode
-local surface_GetTextSize = surface.GetTextSize
 local surface_SetDrawColor = surface.SetDrawColor
 local surface_DrawLine = surface.DrawLine
-local surface_SetFont = surface.SetFont
 local surface_SetMaterial = surface.SetMaterial
 local surface_DrawTexturedRect = surface.DrawTexturedRect
 local table_sort = table.sort
@@ -119,6 +117,7 @@ local ICON_SPAWNPOINT = Material("icon16/user_add.png")
 local ICON_FILTER = Material("icon16/tag_blue.png")
 local ICON_NODE = Material("icon16/map_go.png")
 
+local ICON_CAMERA = Material("icon16/camera.png")
 local ICON_CLOUDS = Material("icon16/weather_clouds.png")
 local ICON_COMMAND = Material("icon16/application_xp_terminal.png")
 local ICON_COMMENT = Material("icon16/comment.png")
@@ -156,11 +155,12 @@ local ENT_ICONS = {
 	phys_lengthconstraint = Material("icon16/link.png"),
 	phys_keepupright = Material("icon16/arrow_up.png"),
 	player_speedmod = Material("icon16/lightning.png"),
-	point_camera = Material("icon16/camera.png"),
+	point_camera = ICON_CAMERA,
 	point_clientcommand = ICON_COMMAND,
 	point_message = ICON_COMMENT,
 	point_message_multiplayer = ICON_COMMENT,
 	point_servercommand = ICON_COMMAND,
+	point_viewcontrol = ICON_CAMERA,
 	scripted_sequence = Material("icon16/script_go.png"),
 	water_lod_control = ICON_WATER,
 }
@@ -302,6 +302,12 @@ local function create_bmodel_mesh(bmodel, idx)
 	for _, side in ipairs(brush_verts) do
 		newBrush[#newBrush + 1] = dedupe(side)
 		vertCount = vertCount + #side
+	end
+
+	local count = vertCount * 2
+	if count > 32768 then
+		print("[picker3] BRUSH MODEL TOO BIG TO OUTLINE", idx, count .. " > 32768")
+		return
 	end
 
 	local obj = Mesh()

@@ -32,6 +32,8 @@ do -- better tostrings
 			prefix = "Weapon"
 		elseif self:IsVehicle() then
 			prefix = "Vehicle"
+		elseif self:IsNPC() then
+			prefix = "NPC"
 		end
 
 		local str = Format("%s [%d]{Class=%q", prefix, self:EntIndex(), self:GetClass())
@@ -61,6 +63,9 @@ do -- better tostrings
 
 	local VEHICLE = FindMetaTable("Vehicle")
 	VEHICLE.__tostring = ENTITY.__tostring
+
+	local NPC = FindMetaTable("NPC")
+	NPC.__tostring = ENTITY.__tostring
 
 	local VECTOR = FindMetaTable("Vector")
 	function VECTOR:__tostring()
