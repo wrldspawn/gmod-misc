@@ -1,69 +1,84 @@
-if not serversecure then pcall(require, "serversecure") end
-if not serversecure then return end
-if not serversecure.Version:find("serversecure%-playerquery") then
-	ErrorNoHalt("bad serversecure version for query_extras")
-	return
-end
+if not HolyLib then return end
 
 local TAG = "query_extras"
 
 queryextras_connecting = queryextras_connecting or {}
 
-gameevent.Listen("player_connect")
-hook.Add("player_connect", TAG, function(data)
-	if tobool(data.bot) then return end
-
-	queryextras_connecting[data.userid] = {
-		start = SysTime(),
-		name = data.name
-	}
-end)
-
-gameevent.Listen("player_disconnect")
-hook.Add("player_disconnect", TAG, function(data)
-	queryextras_connecting[data.userid] = nil
-end)
-
-hook.Add("PlayerInitialSpawn", TAG, function(ply)
-	queryextras_connecting[ply:UserID()] = nil
-end)
-
-hook.Add("A2S_PLAYER", TAG, function(ip, port)
+local function GetPlayers()
 	local now = SysTime()
 
 	local highest = 0
 	local lowest = 0
 
+	local fields = {}
 	local plys = {}
-	local _plys = {}
-
-	for _, ply in player.Iterator() do
-		local score = ply:Frags()
-
-		if score > highest then
-			highest = score
-		elseif lowest > score then
-			lowest = score
-		end
-
-		_plys[#_plys + 1] = { name = ply:Name(), score = score, time = ply:TimeConnected() }
-	end
+	local connecting = {}
 
 	local i = 1
-	for _, data in pairs(queryextras_connecting) do
-		_plys[#_plys + 1] = { name = "[Connecting] " .. data.name, score = lowest - i, time = now - data.start }
-		i = i + 1
+	for _, client in ipairs(gameserver.GetAll()) do
+		local uid = client:GetUserID()
+		local ply = Player(uid)
+
+		local score = 0
+		local time = now - client:GetConnectTime()
+
+		if IsValid(ply) then
+			score = ply:Frags()
+
+			if score > highest then
+				highest = score
+			elseif lowest > score then
+				lowest = score
+			end
+
+			plys[#plys + 1] = { name = ply:Name(), score = score, time = time }
+		else
+			score = lowest - i
+
+			connecting[#connecting + 1] = { name = "[Connecting] " .. client:GetName(), score = score, time = time }
+
+			i = i + 1
+		end
 	end
 
 	-- gmod server list sorts by time, everything else sorts by score
 	local curtime = CurTime()
-	plys[#plys + 1] = { name = "Server Uptime:", score = highest + 3, time = now }
-	plys[#plys + 1] = { name = "Map Uptime:", score = highest + 2, time = curtime }
-	plys[#plys + 1] = { name = "————————————", score = highest + 1, time = curtime - 1 }
+	fields[#fields + 1] = { name = "Server Uptime:", score = highest + 3, time = now }
+	fields[#fields + 1] = { name = "Map Uptime:", score = highest + 2, time = curtime }
+	fields[#fields + 1] = { name = "————————————", score = highest + 1, time = curtime - 1 }
 
-	for _, ply in ipairs(_plys) do
-		plys[#plys + 1] = ply
+	for _, row in ipairs(plys) do
+		fields[#fields + 1] = row
+	end
+	for _, row in ipairs(connecting) do
+		fields[#fields + 1] = row
 	end
 
-	return plys
+	return fields
+end
+
+local PLAYER_REQUEST = string.byte("U")
+local PLAYER_RESPONSE = string.byte("D")
+hook.Add("HolyLib:ProcessConnectionlessPacket", TAG, function(bf, ip)
+	local header = bf:ReadByte()
+	if header ~= PLAYER_REQUEST then return end
+	local challenge = bf:ReadLong()
+	if challenge == 0 or challenge == -1 then return end
+
+	local players = GetPlayers()
+
+	local packet = bitbuf.CreateWriteBuffer(262144)
+	packet:WriteLong(-1)
+	packet:WriteByte(PLAYER_RESPONSE)
+	packet:WriteByte(#players)
+
+	for i, ply in ipairs(players) do
+		packet:WriteByte(i - 1)
+		packet:WriteString(ply.name)
+		packet:WriteLong(ply.score)
+		packet:WriteFloat(ply.time)
+	end
+
+	gameserver.SendConnectionlessPacket(packet, ip)
+	return true
 end)
