@@ -58,5 +58,5 @@ local function FindFlags(inp, enum_name)
 		end
 	end
 end
-
-FindFlags(8452, "SF_")
+_G.FindFlags = FindFlags
+--FindFlags(8452, "SF_")

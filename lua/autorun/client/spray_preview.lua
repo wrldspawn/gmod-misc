@@ -53,8 +53,12 @@ hook.Add("CreateMove", TAG, function(cmd)
 	end
 end)
 
-local spray = GetConVar("cl_logofile"):GetString():gsub("%.vtf$", ""):gsub("^materials/", "")
-local spray_mat = Material(spray)
+local spray = GetConVar("cl_logofile"):GetString():gsub("^materials/", "")
+local spray_mat = CreateMaterial(TAG, "UnlitGeneric", {
+	["$basetexture"] = spray,
+	["$vertexcolor"] = 1,
+	["$vertexalpha"] = 1,
+})
 
 hook.Add("HUDPaint", TAG, function()
 	if not holding then return end
@@ -147,22 +151,22 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function()
 	end
 	if norm.z == 0 then
 		pos = pos + SPRAY_CAN_OFFSET
+	elseif norm.z == 1 then
+		pos = pos + (up * 2)
 	end
 
 	local ang = norm:AngleEx(up)
 	ang:RotateAroundAxis(ang:Up(), 90)
 	ang:RotateAroundAxis(ang:Forward(), 90)
 
-	cam.Start3D2D(pos + ang:Up() * 0.1, ang, 1)
 	local tone = render.GetToneMappingScaleLinear()
 	render.SetToneMappingScaleLinear(NO_HDR)
-	surface.SetAlphaMultiplier(0.5)
+	cam.Start3D2D(pos + ang:Up() * 0.1, ang, 1)
 
 	surface.SetMaterial(spray_mat)
-	surface.SetDrawColor(255, 255, 255)
+	surface.SetDrawColor(255, 255, 255, 128)
 	surface.DrawTexturedRect(-32, -32, 64, 64)
 
-	surface.SetAlphaMultiplier(1)
-	render.SetToneMappingScaleLinear(tone)
 	cam.End3D2D()
+	render.SetToneMappingScaleLinear(tone)
 end)

@@ -146,6 +146,7 @@ elseif CLIENT then
 	end)
 
 	local OFFSET = Vector(0, 0, 12)
+	local NO_HDR = Vector(0.6, 0, 0)
 	hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, sky3d)
 		if skybox then return end
 		local lply = LocalPlayer()
@@ -165,8 +166,9 @@ elseif CLIENT then
 			ang:RotateAroundAxis(ang:Forward(), 90)
 			ang:RotateAroundAxis(ang:Right(), 90)
 
+			local tone = render.GetToneMappingScaleLinear()
+			render.SetToneMappingScaleLinear(NO_HDR)
 			cam.Start3D2D(pos, Angle(0, ang.y, 90), 0.5)
-			render.SuppressEngineLighting(true)
 			render.PushFilterMag(TEXFILTER.POINT)
 			render.PushFilterMin(TEXFILTER.POINT)
 			surface.SetMaterial(icon_mat)
@@ -174,8 +176,8 @@ elseif CLIENT then
 			surface.DrawTexturedRect(-8, 0, 16, 16)
 			render.PopFilterMin()
 			render.PopFilterMag()
-			render.SuppressEngineLighting(false)
 			cam.End3D2D()
+			render.SetToneMappingScaleLinear(tone)
 		end
 	end)
 end

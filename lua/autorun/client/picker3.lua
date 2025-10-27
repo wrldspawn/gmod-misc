@@ -18,7 +18,6 @@ local TEXFILTER_POINT = TEXFILTER.POINT
 
 local cam_Start3D2D = cam.Start3D2D
 local cam_End3D2D = cam.End3D2D
-local render_SuppressEngineLighting = render.SuppressEngineLighting
 local render_PushFilterMag = render.PushFilterMag
 local render_PushFilterMin = render.PushFilterMin
 local render_PopFilterMag = render.PopFilterMag
@@ -118,50 +117,82 @@ local ICON_FILTER = Material("icon16/tag_blue.png")
 local ICON_NODE = Material("icon16/map_go.png")
 
 local ICON_CAMERA = Material("icon16/camera.png")
+local ICON_CAR = Material("icon16/car.png")
+local ICON_CHOREO = Material("icon16/script_go.png")
 local ICON_CLOUDS = Material("icon16/weather_clouds.png")
 local ICON_COMMAND = Material("icon16/application_xp_terminal.png")
 local ICON_COMMENT = Material("icon16/comment.png")
+local ICON_EFFECT = Material("icon16/wand.png")
+local ICON_GO = Material("icon16/bullet_go.png")
+local ICON_ITEM = Material("icon16/box.png")
+local ICON_LINK = Material("icon16/link.png")
+local ICON_MAKER = Material("icon16/brick_add.png")
+local ICON_MATERIAL = Material("icon16/image.png")
+local ICON_NPC = Material("icon16/monkey.png")
+local ICON_POINT = Material("icon16/arrow_down.png")
 local ICON_SOUND = Material("icon16/sound.png")
 local ICON_TARGET = CreateIcon("info_target", "editor/info_target")
+local ICON_UP = Material("icon16/arrow_up.png")
 local ICON_WATER = Material("icon16/water.png")
 local ICON_WEAPON = Material("icon16/gun.png")
 local ICON_VECTOR = Material("icon16/vector.png")
 
 local ENT_ICONS = {
+	ai_battle_line = ICON_GO,
+	ai_goal_actbusy = Material("icon16/cog_go.png"),
+	ai_goal_assault = ICON_GO,
+	ai_script_conditions = Material("icon16/script_gear.png"),
 	ambient_generic = ICON_SOUND,
+	assault_assaultpoint = ICON_POINT,
+	assault_rallypoint = ICON_POINT,
+	combine_mine = ICON_WEAPON,
+	env_ar2explosion = Material("icon16/bomb.png"),
 	env_beam = ICON_VECTOR,
-	env_entity_maker = Material("icon16/brick_add.png"),
+	env_entity_maker = ICON_MAKER,
 	env_fog_controller = ICON_CLOUDS,
+	env_gunfire = ICON_EFFECT,
+	env_physimpact = ICON_EFFECT,
 	env_smokestack = Material("icon16/fire.png"),
 	env_soundscape_proxy = ICON_SOUND,
 	env_soundscape_triggerable = ICON_SOUND,
+	env_speaker = ICON_SOUND,
 	env_splash = ICON_WATER,
 	env_steam = ICON_CLOUDS,
+	func_ladderendpoint = ICON_TARGET,
+	func_useableladder = ICON_UP,
 	game_countdown_timer = Material("icon16/hourglass.png"),
 	game_score = Material("icon16/table_add.png"),
+	info_hint = ICON_GO,
 	info_ladder_dismount = ICON_TARGET,
 	info_target = ICON_TARGET,
 	info_teleport_destination = ICON_TARGET,
 	info_waypoint = Material("icon16/exclamation.png"),
-	infodecal = Material("icon16/image.png"),
+	infodecal = ICON_MATERIAL,
 	keyframe_rope = ICON_VECTOR,
 	light_spot = Material("icon16/lightbulb.png"),
+	logic_choreographed_scene = ICON_CHOREO,
 	logic_merchant_relay = Material("icon16/cart.png"),
+	logic_playerproxy = Material("icon16/user_go.png"),
+	material_modify_control = ICON_MATERIAL,
 	move_rope = ICON_VECTOR,
+	npc_antlion_template_maker = ICON_MAKER,
+	npc_apcdriver = ICON_CAR,
 	npc_bullseye = ICON_TARGET,
+	npc_enemyfinder = Material("icon16/magnifier.png"),
 	path_track = Material("icon16/chart_line.png"),
-	phys_constraint = Material("icon16/link.png"),
-	phys_constraintsystem = Material("icon16/link.png"),
-	phys_lengthconstraint = Material("icon16/link.png"),
-	phys_keepupright = Material("icon16/arrow_up.png"),
+	phys_constraint = ICON_LINK,
+	phys_constraintsystem = ICON_LINK,
+	phys_lengthconstraint = ICON_LINK,
+	phys_keepupright = ICON_UP,
 	player_speedmod = Material("icon16/lightning.png"),
 	point_camera = ICON_CAMERA,
+	point_devshot_camera = ICON_CAMERA,
 	point_clientcommand = ICON_COMMAND,
 	point_message = ICON_COMMENT,
 	point_message_multiplayer = ICON_COMMENT,
 	point_servercommand = ICON_COMMAND,
 	point_viewcontrol = ICON_CAMERA,
-	scripted_sequence = Material("icon16/script_go.png"),
+	scripted_sequence = ICON_CHOREO,
 	water_lod_control = ICON_WATER,
 }
 
@@ -370,6 +401,8 @@ local function GetMapEnts()
 				text = ent.text or ent.message,
 				target = ent.target or ent.landmark or ent.attach1 or ent.entitytemplate,
 				startvalue = ent.startvalue or ent.InitialValue,
+				maxvalue = ent.max,
+				minvalue = ent.min,
 				compvalue = ent.CompareValue,
 				disabled = tobool(ent.startdisabled ~= nil and ent.startdisabled or ent.StartDisabled),
 				outputs = {},
@@ -399,6 +432,12 @@ local function GetMapEnts()
 						ENT_ICONS[class] = CreateIcon(class, path)
 					elseif class:find("^weapon_") then
 						ENT_ICONS[class] = ICON_WEAPON
+					elseif class:find("^item_") then
+						ENT_ICONS[class] = ICON_ITEM
+					elseif class:find("^vehicle_") then
+						ENT_ICONS[class] = ICON_CAR
+					elseif class:find("^npc_") then
+						ENT_ICONS[class] = ICON_NPC
 					end
 				end
 			end
@@ -697,6 +736,7 @@ hook.Add("HUDPaint", TAG, function()
 			if ent.texture then
 				if decal_cache[ent.texture] == nil then
 					local path = "materials/" .. ent.texture
+					path = path:gsub("%.spr$", "")
 					if not ent.texture:find("%.vmt$") then
 						path = path .. ".vmt"
 					end
@@ -728,6 +768,8 @@ hook.Add("HUDPaint", TAG, function()
 
 			picktext.AddLine(lines, ent.text, "Text: ", COLOR_FIELD, COLOR_TEXT)
 			picktext.AddLine(lines, ent.startvalue, "Starting Value: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, ent.minvalue, "Min Value: ", COLOR_FIELD, COLOR_TEXT)
+			picktext.AddLine(lines, ent.maxvalue, "Max Value: ", COLOR_FIELD, COLOR_TEXT)
 			picktext.AddLine(lines, ent.compvalue, "Compare Value: ", COLOR_FIELD, COLOR_TEXT)
 
 			picktext.AddLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
@@ -747,6 +789,7 @@ hook.Add("HUDPaint", TAG, function()
 	end
 end)
 
+local NO_HDR = Vector(0.6, 0, 0)
 hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d)
 	if skybox then return end
 	if not PICKER_ENABLED then return end
@@ -771,9 +814,6 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		local dist = Vector_Distance(eyepos, pos)
 		if dist > 32768 then continue end
 
-		local hit = hitpos ~= nil
-		has_hit = hit
-
 		if ent.model ~= nil then
 			if ent.model:find("^%*") and hitpos ~= nil then
 				local idx = tonumber(ent.model:sub(2))
@@ -784,11 +824,18 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 			end
 			continue
 		end
+		local mdl = isvalid and entity:GetModel()
+		if isvalid and mdl and mdl ~= "" then continue end
 
 		if dist > 512 then continue end
 
 		local spos = Vector_ToScreen(pos)
 		if not spos.visible then continue end
+
+		local hit = hitpos ~= nil
+		if hit then
+			has_hit = hit
+		end
 
 		local icon = {
 			class = ent.class,
@@ -802,6 +849,8 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 	Angle_RotateAroundAxis(eyeang, fwd, 90)
 	Angle_RotateAroundAxis(eyeang, Angle_Right(eyeang), 90)
 
+	local tone = render.GetToneMappingScaleLinear()
+	render.SetToneMappingScaleLinear(NO_HDR)
 	for _, icon in ipairs(to_render) do
 		local alpha = icon.hit and 255 or 72
 		if not has_hit then
@@ -811,7 +860,6 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		local icon_mat = ENT_ICONS[icon.class] or ICON_DEFAULT
 
 		cam_Start3D2D(icon.pos, eyeang, 0.5)
-		render_SuppressEngineLighting(true)
 		render_PushFilterMag(TEXFILTER_POINT)
 		render_PushFilterMin(TEXFILTER_POINT)
 
@@ -821,7 +869,6 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 
 		render_PopFilterMin()
 		render_PopFilterMag()
-		render_SuppressEngineLighting(false)
 		cam_End3D2D()
 	end
 
@@ -830,4 +877,5 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		if not obj:IsValid() then continue end
 		obj:Draw()
 	end
+	render.SetToneMappingScaleLinear(tone)
 end)

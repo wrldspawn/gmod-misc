@@ -731,10 +731,13 @@ end
 
 
 -- draw the meshes
+local NO_HDR = Vector(0.8, 0, 0)
 hook.Add("PostDrawTranslucentRenderables", "showclips", function(depth, skybox, skybox3d)
 	if skybox then return end
 
 	if showclips or showtriggers then
+		local tone = render.GetToneMappingScaleLinear()
+		render.SetToneMappingScaleLinear(NO_HDR)
 		render.SetColorMaterial()
 
 		if showclips then
@@ -756,6 +759,7 @@ hook.Add("PostDrawTranslucentRenderables", "showclips", function(depth, skybox, 
 				render.DrawWireframeSphere(point.pos, point.radius, 32, 16, col, true)
 			end
 		end
+		render.SetToneMappingScaleLinear(tone)
 	end
 end)
 
