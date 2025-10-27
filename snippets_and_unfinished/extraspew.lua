@@ -1,4 +1,4 @@
-local col = Color(255, 128, 255)
+local col = Color(192, 128, 192)
 local dev = GetConVar("developer")
 
 hook.Add("EngineSpew", "ExtraSpews", function(a, msg, c, d, r, g, b)

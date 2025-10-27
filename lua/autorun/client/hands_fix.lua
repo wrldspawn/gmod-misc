@@ -43,3 +43,11 @@ hook.Add("PreDrawViewModels", "holylib_viewmodel_fix", function()
 		vm:SetNoDraw(shouldHide)
 	end
 end)
+
+-- i guess we doing legs now
+hook.Add("ShouldDisableLegs", "prop_vehicle_choreo_generic", function()
+	local veh = LocalPlayer():GetVehicle()
+	if IsValid(veh) and veh:GetClass() == "prop_vehicle_choreo_generic" then
+		return true
+	end
+end)
