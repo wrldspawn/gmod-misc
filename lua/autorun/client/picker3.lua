@@ -710,12 +710,13 @@ hook.Add("HUDPaint", TAG, function()
 					if filterent then
 						filter = ent.filter
 						local filterclass = filterent.classname
+						local badFilter = string.format("<bad filter: %s>", filter)
 						if filterclass == "filter_activator_class" then
-							filter = "By class: " .. filterent.filterclass
+							filter = "By class: " .. (filterent.filterclass or badFilter)
 						elseif filterclass == "filter_activator_name" then
-							filter = "By name: " .. filterent.filtername
+							filter = "By name: " .. (filterent.filtername or badFilter)
 						elseif filterclass == "filter_activator_team" then
-							filter = "By team: " .. team.GetName(filterent.filterteam)
+							filter = "By team: " .. (filterent.filterteam and team.GetName(filterent.filterteam) or badFilter)
 						end
 						filter_cache[ent.filter] = filter
 					else
