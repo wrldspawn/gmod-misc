@@ -313,6 +313,7 @@ local function collectTriggerBrushes()
 		triggerBrushes[#triggerBrushes + 1] = brush_verts
 		local info = {
 			class = trigger.classname,
+			model = trigger.model,
 			name = trigger.targetname,
 			filter = trigger.filtername,
 			target = trigger.target or trigger.landmark,
@@ -845,6 +846,7 @@ hook.Add("HUDPaint", "showtriggers", function()
 				end
 			end
 
+			picktext.AddLine(lines, trigger.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
 			picktext.AddLine(lines, trigger.speed, "Speed: ", COLOR_FIELD, COLOR_TEXT)
 
 			picktext.AddLine(lines, trigger.target, "Destination: ", COLOR_DEST,
