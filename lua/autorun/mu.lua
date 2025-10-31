@@ -371,6 +371,8 @@ local function mu_env(ply)
 		hooks = hook.GetTable(),
 		us = mu(ents.FindInSphere(ply:GetPos(), 256)):filter("e->e:IsPlayer()"),
 		all = mu.p(),
+		bots = mu.p.b(),
+		humans = mu.p.h(),
 		allof = mu.e.c,
 		named = mu.e.n,
 	}

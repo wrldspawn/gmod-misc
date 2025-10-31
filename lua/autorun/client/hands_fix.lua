@@ -40,7 +40,9 @@ hook.Add("PreDrawViewModels", "holylib_viewmodel_fix", function()
 		end
 
 		local vm = ply:GetViewModel()
-		vm:SetNoDraw(shouldHide)
+		if IsValid(vm) then
+			vm:SetNoDraw(shouldHide)
+		end
 	end
 end)
 
