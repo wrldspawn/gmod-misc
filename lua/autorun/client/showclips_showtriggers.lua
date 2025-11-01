@@ -772,6 +772,8 @@ local COLOR_INVALID = Color(255, 0, 0)
 local COLOR_FILTER = Color(231, 16, 148)
 local COLOR_FIELD = Color(192, 192, 192) -- temp color?
 
+local FORMAT_3 = "%.2f, %.2f, %.2f"
+
 local developer = GetConVar("developer")
 
 local filter_cache = {}
@@ -848,6 +850,9 @@ hook.Add("HUDPaint", "showtriggers", function()
 
 			picktext.AddLine(lines, trigger.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
 			picktext.AddLine(lines, trigger.speed, "Speed: ", COLOR_FIELD, COLOR_TEXT)
+
+			local posStr = Format(FORMAT_3, trigger.origin:Unpack())
+			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, COLOR_TEXT)
 
 			picktext.AddLine(lines, trigger.target, "Destination: ", COLOR_DEST,
 				trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)
