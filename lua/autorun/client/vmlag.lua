@@ -20,7 +20,7 @@ local function VectorMA(start, scale, direction, dest)
 end
 
 hook.Add("CalcViewModelView", "vmlag", function(wep, vm, pos_orig, ang_orig, pos, ang)
-	if not enabled:GetBool() then return pos, ang end
+	if not enabled:GetBool() then return end
 
 	local maxLag = _maxLag:GetFloat()
 
@@ -82,6 +82,4 @@ hook.Add("CalcViewModelView", "vmlag", function(wep, vm, pos_orig, ang_orig, pos
 		VectorMA(pos, -pitch * 0.03, right, pos)
 		VectorMA(pos, -pitch * 0.02, up, pos)
 	end
-
-	return pos, ang
 end)

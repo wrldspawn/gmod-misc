@@ -145,14 +145,17 @@ local ENT_ICONS = {
 	ambient_generic = ICON_SOUND,
 	assault_assaultpoint = ICON_POINT,
 	assault_rallypoint = ICON_POINT,
+	beam = ICON_VECTOR,
 	combine_mine = ICON_WEAPON,
 	env_ar2explosion = Material("icon16/bomb.png"),
 	env_beam = ICON_VECTOR,
 	env_entity_maker = ICON_MAKER,
 	env_fog_controller = ICON_CLOUDS,
 	env_gunfire = ICON_EFFECT,
+	env_laser = ICON_VECTOR,
 	env_physimpact = ICON_EFFECT,
 	env_smokestack = Material("icon16/fire.png"),
+	env_sound = ICON_SOUND,
 	env_soundscape_proxy = ICON_SOUND,
 	env_soundscape_triggerable = ICON_SOUND,
 	env_speaker = ICON_SOUND,
@@ -174,6 +177,7 @@ local ENT_ICONS = {
 	logic_merchant_relay = Material("icon16/cart.png"),
 	logic_playerproxy = Material("icon16/user_go.png"),
 	material_modify_control = ICON_MATERIAL,
+	monstermaker = ICON_MAKER,
 	move_rope = ICON_VECTOR,
 	npc_antlion_template_maker = ICON_MAKER,
 	npc_apcdriver = ICON_CAR,
@@ -432,11 +436,11 @@ local function GetMapEnts()
 						ENT_ICONS[class] = CreateIcon(class, path)
 					elseif class:find("^weapon_") then
 						ENT_ICONS[class] = ICON_WEAPON
-					elseif class:find("^item_") then
+					elseif class:find("^item_") or class:find("^ammo_") then
 						ENT_ICONS[class] = ICON_ITEM
 					elseif class:find("^vehicle_") then
 						ENT_ICONS[class] = ICON_CAR
-					elseif class:find("^npc_") then
+					elseif class:find("^npc_") or class:find("^monster_") then
 						ENT_ICONS[class] = ICON_NPC
 					end
 				end
