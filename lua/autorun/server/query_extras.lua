@@ -20,7 +20,12 @@ local function GetPlayers()
 		local ply = Player(uid)
 
 		local score = 0
-		local time = now - client:GetConnectTime()
+		local time = 0
+		if client:IsFakeClient() then
+			time = ply:TimeConnected()
+		else
+			time = now - client:GetConnectTime()
+		end
 
 		if IsValid(ply) then
 			score = ply:Frags()

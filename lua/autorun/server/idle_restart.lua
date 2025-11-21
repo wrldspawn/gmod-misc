@@ -3,7 +3,13 @@ local enabled = CreateConVar("sv_idlerestart", "1", FCVAR_ARCHIVE, "Automaticall
 local restarting = false
 hook.Add("Think", "idlerestart", function()
 	if not enabled then return end
-	if #player.GetHumans() > 0 then return end
+
+	local total = #player.GetHumans()
+	if gameserver then
+		total = gameserver.GetNumClients() - gameserver.GetNumFakeClients()
+	end
+
+	if total > 0 then return end
 	if restarting then return end
 
 	if SysTime() > 43200 then
