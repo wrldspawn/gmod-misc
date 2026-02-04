@@ -469,6 +469,24 @@ local function GetMapEnts()
 
 			table.insert(MAP_ENTS, info)
 		end
+
+		-- pairs instead of ipairs cause 0 index
+		for _, prop in pairs(MAP:GetStaticProps()) do
+			local info = {
+				class = "prop_static",
+				origin = prop.Origin,
+				angle = prop.Angle,
+				model = prop.PropType,
+			}
+
+			local mdl = util.GetModelInfo(info.model)
+			if mdl then
+				info.mins = mdl.HullMin
+				info.maxs = mdl.HullMax
+			end
+
+			table.insert(MAP_ENTS, info)
+		end
 	end
 end
 
@@ -779,12 +797,14 @@ hook.Add("HUDPaint", TAG, function()
 
 			picktext.AddLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
 
-			for on, outputs in next, ent.outputs do
-				if isstring(outputs) then
-					picktext.AddLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
-				else
-					for _, output in ipairs(outputs) do
-						picktext.AddLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+			if ent.outputs ~= nil then
+				for on, outputs in next, ent.outputs do
+					if isstring(outputs) then
+						picktext.AddLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+					else
+						for _, output in ipairs(outputs) do
+							picktext.AddLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						end
 					end
 				end
 			end
