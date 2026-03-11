@@ -345,24 +345,33 @@ local function create_bmodel_mesh(bmodel, idx)
 		return
 	end
 
-	local obj = Mesh()
-	mesh.Begin(obj, MATERIAL_LINES, vertCount)
-	for _, side in ipairs(newBrush) do
-		for j, vert in ipairs(side) do
-			mesh.Color(255, 128, 0, 255)
-			mesh.Position(vert)
-			mesh.AdvanceVertex()
-
-			local nextVert = side[j + 1 % #side]
-			if not nextVert then nextVert = side[1] end
-			mesh.Color(255, 128, 0, 255)
-			mesh.Position(nextVert)
-			mesh.AdvanceVertex()
-		end
+	if count < 1 then
+		print("[picker3] brush model too small", idx, count .. " < 1")
+		return
 	end
-	mesh.End()
 
-	picker3_meshes[idx] = obj
+	local obj = Mesh()
+	local ok, err = pcall(mesh.Begin, obj, MATERIAL_LINES, vertCount)
+	if not ok then
+		print("[picker3] failed to start mesh", idx, ":", err)
+	else
+		for _, side in ipairs(newBrush) do
+			for j, vert in ipairs(side) do
+				mesh.Color(255, 128, 0, 255)
+				mesh.Position(vert)
+				mesh.AdvanceVertex()
+
+				local nextVert = side[j + 1 % #side]
+				if not nextVert then nextVert = side[1] end
+				mesh.Color(255, 128, 0, 255)
+				mesh.Position(nextVert)
+				mesh.AdvanceVertex()
+			end
+		end
+		mesh.End()
+
+		picker3_meshes[idx] = obj
+	end
 end
 
 -- handled by showtriggers
