@@ -494,6 +494,11 @@ local function generateClipMeshes()
 			return
 		end
 
+		if count < 1 then
+			print("[showclips] brush too small", i, count .. " < 1")
+			return
+		end
+
 		obj = Mesh()
 		mesh.Begin(obj, MATERIAL_LINES, vertCount)
 		for _, side in ipairs(newBrush) do
@@ -649,6 +654,11 @@ local function generateTriggerMeshes()
 		local count = vertCount * 2
 		if count > 32768 then
 			print("[showtriggers] TRIGGER TOO BIG TO OUTLINE", brush.model, brush.class, brush.origin, count .. " > 32768")
+			return
+		end
+
+		if count < 1 then
+			print("[showtriggers] trigger too small", brush.model, brush.class, brush.origin, count .. " < 1")
 			return
 		end
 
