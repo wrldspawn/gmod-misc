@@ -464,6 +464,16 @@ local function generateClipMeshes()
 			vertCount = vertCount + #side
 		end
 
+		if vertCount > 32768 then
+			print("[showclips] BRUSH TOO BIG TO MAKE SIDE", i, vertCount .. " > 32768")
+			return
+		end
+
+		if vertCount < 1 then
+			print("[showclips] brush too small", i, vertCount .. " < 1")
+			return
+		end
+
 		local obj = Mesh()
 		mesh.Begin(obj, MATERIAL_TRIANGLES, vertCount / 3)
 		for i, side in ipairs(brush) do
@@ -630,6 +640,17 @@ local function generateTriggerMeshes()
 		local vertCount = 0
 		for _, side in ipairs(brush) do
 			vertCount = vertCount + #side
+		end
+
+		if vertCount > 32768 then
+			print("[showtriggers] TRIGGER TOO BIG TO MAKE SIDE", brush.model, brush.class, brush.origin,
+				vertCount .. " > 32768")
+			return
+		end
+
+		if vertCount < 1 then
+			print("[showtriggers] trigger too small", brush.model, brush.class, brush.origin, vertCount .. " < 1")
+			return
 		end
 
 		local obj = Mesh()
