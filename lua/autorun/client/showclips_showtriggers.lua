@@ -104,10 +104,117 @@ local function VerticiesFromPlanes(planes)
 end
 -- }}}
 
-local function collectClipBrushes()
-	local mapBrushes = MAP:GetBrushes()
+local function vertsFromBrush(brush, pos, angle)
+	local planes = {}
+	for _, side in ipairs(brush.sides) do
+		planes[#planes + 1] = side.plane
+	end
+
+	local verts = VerticiesFromPlanes(planes)
+
+	local brush_verts = {}
+	for _, side in ipairs(brush.sides) do
+		local plane = side.plane
+		local norm = plane.normal
+
+		local points = {}
+
+		local offset = pos or VECTOR_ZERO
+		local ang = angle or ANGLE_ZERO
+
+		for _, vert in ipairs(verts) do
+			local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
+			if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
+
+			local newPos = vert + offset
+			newPos:Rotate(ang)
+
+			points[#points + 1] = newPos
+		end
+
+		-- sort them in clockwise order
+		local c = points[1]
+		table.sort(points, function(a, b)
+			local dot = norm:Dot((c - a):Cross(b - c))
+			return dot > 0.001
+		end)
+
+		local sidePoints = {}
+		for i = 1, #points - 2 do
+			sidePoints[#sidePoints + 1] = points[1] + norm * 0
+			sidePoints[#sidePoints + 1] = points[i + 1] + norm * 0
+			sidePoints[#sidePoints + 1] = points[i + 2] + norm * 0
+		end
+
+		-- somehow ended up with empty sides
+		if #sidePoints > 0 then
+			brush_verts[#brush_verts + 1] = sidePoints
+			sidePoints.norm = norm
+		end
+	end
+
+	return brush_verts
+end
+
+-- https://github.com/ata4/bspsrc/blob/master/bspsrc-decompiler/src/main/java/info/ata4/bspsrc/decompiler/util/BspTreeStats.java
+local function TreeStats()
+	local mt = {
+		reset = function(self)
+			self.bmin = math.huge
+			self.bmax = -1
+			self.fmin = math.huge
+			self.fmax = -1
+			self.nmax = -1
+		end,
+		walk = function(self, node)
+			if node < 0 then
+				local leaf = math.abs(-1 - node)
+				local l = MAP:GetLeafs()[leaf]
+
+				for i = 0, l.numleaffaces - 1 do
+					local f = MAP:GetLeafFaces()[l.firstleafface + i + 1]
+					self.fmax = math.max(self.fmax, f)
+					self.fmin = math.min(self.fmin, f)
+				end
+
+				for i = 0, l.numleafbrushes - 1 do
+					local b = MAP:GetLeafBrushes()[l.firstleafbrush + i + 1]
+					if b ~= nil then
+						self.bmax = math.max(self.bmax, b.__id)
+						self.bmin = math.min(self.bmin, b.__id)
+					else
+						print(node, leaf, "missing leaf brush", l.firstleafbrush + i + 1)
+					end
+				end
+			else
+				self.nmax = math.max(self.nmax, node)
+				local n = MAP:GetNodes()[node]
+
+				self:walk(n.children[1])
+				self:walk(n.children[2])
+			end
+		end,
+	}
+	mt.__index = mt
+
+	return setmetatable({
+		bmin = math.huge,
+		bmax = -1,
+		fmin = math.huge,
+		fmax = -1,
+		nmax = -1,
+	}, mt)
+end
+
+local bmodelsFixed = false
+local function fixBrushModels()
+	if bmodelsFixed then return end
+
+	local brushes = MAP:GetBrushes()
 	local bsides = MAP:GetBrushSides()
 	local bmodels = MAP:GetBModels()
+
+	local tl = TreeStats()
 
 	-- process brush sides a second time to get planenum
 	local lump = MAP:GetLump(19)
@@ -118,8 +225,34 @@ local function collectClipBrushes()
 	end
 	MAP:ClearLump(19)
 
+	for i, model in ipairs(bmodels) do
+		tl:reset()
+		tl:walk(model.headnode)
+
+		if tl.fmin < math.huge then
+			model.firstface = tl.fmin
+			model.numfaces = tl.fmax - tl.fmin + 1
+		elseif tl.bmin < math.huge then
+			print(i, tl.bmin, tl.bmax)
+			for bi = 1, (tl.bmax - tl.bmin + 1) do
+				local numbrush = tl.bmin + bi
+				brushes[numbrush].bmodel = i
+			end
+		end
+	end
+
+	bmodelsFixed = true
+end
+
+local function collectClipBrushes()
+	fixBrushModels()
+
+	local mapBrushes = MAP:GetBrushes()
+
 	local brushes = {}
 	for _, brush in ipairs(mapBrushes) do
+		if brush.bmodel ~= nil then continue end
+
 		local invis = true
 		local sky = false
 		local nodraw = true
@@ -154,104 +287,35 @@ local function collectClipBrushes()
 		brush.invis = invis
 		brush.sky = sky
 		brush.nodraw = nodraw
-		brush.bmodel = nil
 		brushes[#brushes + 1] = brush
-	end
-
-	-- useless in its current state
-	if false then
-		for bi, bmodel in ipairs(bmodels) do
-			-- func_brushes that are made of clip brushes says 0 numfaces
-			if bmodel.numfaces == 0 then continue end
-
-			local faces = bmodel:GetFaces()
-
-			for _, brush in ipairs(brushes) do
-				local sidesWithMatchingPlanes = {}
-				for i = 1, brush.numsides do
-					local side = brush.sides[i]
-					local planenum = side.__planenum
-					if planenum == nil then continue end
-
-					for _, face in ipairs(faces) do
-						if face.planenum == planenum then
-							if face.plane == side.plane then
-								sidesWithMatchingPlanes[i] = true
-							end
-						end
-					end
-				end
-
-				if table.Count(sidesWithMatchingPlanes) == brush.numsides then
-					brush.bmodel = bi
-				end
-			end
-		end
 	end
 
 	-- this implementation is not perfect but it at least works
 	local clipBrushes = {}
 	for _, brush in ipairs(brushes) do
-		local planes = {}
-		for _, side in ipairs(brush.sides) do
-			planes[#planes + 1] = side.plane
-		end
-
-		local verts = VerticiesFromPlanes(planes)
-
-		local brush_verts = {}
-		for _, side in ipairs(brush.sides) do
-			local plane = side.plane
-			local norm = plane.normal
-
-			local points = {}
-
-			local offset = VECTOR_ZERO
-			local ang = ANGLE_ZERO
-
-			if brush.bmodel ~= nil then
-				local ent = MAP:FindByModel("*" .. brush.bmodel)[1]
-				if ent then
-					offset = ent.origin
-					ang = ent.angles or ANGLE_ZERO
-				end
-			end
-
-			for _, vert in ipairs(verts) do
-				local t = vert.x * norm.x + vert.y * norm.y + vert.z * norm.z;
-				if math.abs(t - plane.dist) > 0.01 then continue end -- not on a plane
-
-				local pos = vert + offset
-				pos:Rotate(ang)
-
-				points[#points + 1] = pos
-			end
-
-			-- sort them in clockwise order
-			local c = points[1]
-			table.sort(points, function(a, b)
-				local dot = norm:Dot((c - a):Cross(b - c))
-				return dot > 0.001
-			end)
-
-			local sidePoints = {}
-			for i = 1, #points - 2 do
-				sidePoints[#sidePoints + 1] = points[1] + norm * 0
-				sidePoints[#sidePoints + 1] = points[i + 1] + norm * 0
-				sidePoints[#sidePoints + 1] = points[i + 2] + norm * 0
-			end
-
-			-- somehow ended up with empty sides
-			if #sidePoints > 0 then
-				brush_verts[#brush_verts + 1] = sidePoints
-				sidePoints.norm = norm
-			end
-		end
-		brush_verts.contents = brush:GetContents()
+		local brush_verts = vertsFromBrush(brush)
+		brush_verts.contents = brush.contents
 		brush_verts.invis = brush.invis
 		brush_verts.sky = brush.sky
 		brush_verts.nodraw = brush.nodraw
 		brush_verts.skySides = brush.skySides
+
+		local origin = Vector()
+		local x, y, z = 0, 0, 0
+		local total = 0
+		for _, v in ipairs(brush_verts) do
+			for _, p in ipairs(v) do
+				x = x + p.x
+				y = y + p.y
+				z = z + p.z
+				total = total + 1
+			end
+		end
+		origin.x = x / total
+		origin.y = y / total
+		origin.z = z / total
+
+		if origin.x == 0 and origin.y == 0 and origin.z == 0 then continue end
 
 		clipBrushes[#clipBrushes + 1] = brush_verts
 	end
@@ -272,8 +336,12 @@ local POINT_TYPES = {
 }
 
 local function collectTriggerBrushes()
-	local triggerBrushes = {}
+	fixBrushModels()
+
 	local bmodels = MAP:GetBModels()
+	local mapBrushes = MAP:GetBrushes()
+
+	local triggerBrushes = {}
 	for _, trigger in ipairs(MAP:FindByClass("^trigger_*")) do
 		if not trigger.model then
 			print("trigger with bad model")
@@ -291,26 +359,42 @@ local function collectTriggerBrushes()
 
 		local faces = bmodel:GetFaces()
 
-		local brush_verts = {}
+		if #faces > 0 then
+			local brush_verts = {}
 
-		for _, face in ipairs(faces) do
-			local verts = face:GenerateVertexTriangleData()
-			local side = {}
-			for _, vert in ipairs(verts) do
-				side[#side + 1] = vert.pos
+			for _, face in ipairs(faces) do
+				local verts = face:GenerateVertexTriangleData()
+				local side = {}
+				for _, vert in ipairs(verts) do
+					side[#side + 1] = vert.pos
+				end
+				brush_verts[#brush_verts + 1] = side
 			end
-			brush_verts[#brush_verts + 1] = side
+
+			--local origin = trigger.origin
+
+			brush_verts.classname = trigger.classname
+			brush_verts.outputs = {
+				OnStartTouch = trigger.OnStartTouch,
+				OnEndTouch = trigger.OnEndTouch,
+			}
+
+			triggerBrushes[#triggerBrushes + 1] = brush_verts
+		else
+			for _, brush in ipairs(mapBrushes) do
+				if brush.bmodel ~= model then continue end
+
+				local brush_verts = vertsFromBrush(brush, trigger.origin)
+				brush_verts.classname = trigger.classname
+				brush_verts.outputs = {
+					OnStartTouch = trigger.OnStartTouch,
+					OnEndTouch = trigger.OnEndTouch,
+				}
+
+				triggerBrushes[#triggerBrushes + 1] = brush_verts
+			end
 		end
 
-		--local origin = trigger.origin
-
-		brush_verts.classname = trigger.classname
-		brush_verts.outputs = {
-			OnStartTouch = trigger.OnStartTouch,
-			OnEndTouch = trigger.OnEndTouch,
-		}
-
-		triggerBrushes[#triggerBrushes + 1] = brush_verts
 		local info = {
 			class = trigger.classname,
 			model = trigger.model,
@@ -466,12 +550,12 @@ local function generateClipMeshes()
 
 		if vertCount > 32768 then
 			print("[showclips] BRUSH TOO BIG TO MAKE SIDE", i, vertCount .. " > 32768")
-			return
+			continue
 		end
 
 		if vertCount < 1 then
 			print("[showclips] brush too small", i, vertCount .. " < 1")
-			return
+			continue
 		end
 
 		local obj = Mesh()
@@ -501,12 +585,12 @@ local function generateClipMeshes()
 		local count = vertCount * 2
 		if count > 32768 then
 			print("[showclips] BRUSH TOO BIG TO OUTLINE", i, count .. " > 32768")
-			return
+			continue
 		end
 
 		if count < 1 then
 			print("[showclips] brush too small", i, count .. " < 1")
-			return
+			continue
 		end
 
 		obj = Mesh()
@@ -633,7 +717,7 @@ end
 local function generateTriggerMeshes()
 	local triggerBrushes = collectTriggerBrushes()
 
-	for _, brush in ipairs(triggerBrushes) do
+	for i, brush in ipairs(triggerBrushes) do
 		local col = classify_trigger(brush)
 
 		-- face
@@ -643,14 +727,14 @@ local function generateTriggerMeshes()
 		end
 
 		if vertCount > 32768 then
-			print("[showtriggers] TRIGGER TOO BIG TO MAKE SIDE", brush.model, brush.class, brush.origin,
+			print("[showtriggers] TRIGGER TOO BIG TO MAKE SIDE", i, brush.classname,
 				vertCount .. " > 32768")
-			return
+			continue
 		end
 
 		if vertCount < 1 then
-			print("[showtriggers] trigger too small", brush.model, brush.class, brush.origin, vertCount .. " < 1")
-			return
+			print("[showtriggers] trigger too small", i, brush.classname, vertCount .. " < 1")
+			continue
 		end
 
 		local obj = Mesh()
@@ -674,13 +758,13 @@ local function generateTriggerMeshes()
 
 		local count = vertCount * 2
 		if count > 32768 then
-			print("[showtriggers] TRIGGER TOO BIG TO OUTLINE", brush.model, brush.class, brush.origin, count .. " > 32768")
-			return
+			print("[showtriggers] TRIGGER TOO BIG TO OUTLINE", i, brush.classname, count .. " > 32768")
+			continue
 		end
 
 		if count < 1 then
-			print("[showtriggers] trigger too small", brush.model, brush.class, brush.origin, count .. " < 1")
-			return
+			print("[showtriggers] trigger too small", i, brush.classname, count .. " < 1")
+			continue
 		end
 
 		local r, g, b = col:Unpack()
