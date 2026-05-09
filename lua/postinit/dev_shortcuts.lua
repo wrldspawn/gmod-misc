@@ -8,6 +8,14 @@ _G.hook = setmetatable(_G.hook, {
 	end,
 })
 
+_G.cmd = function(str)
+	if CLIENT then
+		LocalPlayer():ConCommand(str)
+	elseif SERVER then
+		game.ConsoleCommand(str .. "\n")
+	end
+end
+
 do -- better tostrings
 	local PLAYER = FindMetaTable("Player")
 	function PLAYER:__tostring()
