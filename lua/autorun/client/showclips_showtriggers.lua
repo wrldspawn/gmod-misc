@@ -233,7 +233,6 @@ local function fixBrushModels()
 			model.firstface = tl.fmin
 			model.numfaces = tl.fmax - tl.fmin + 1
 		elseif tl.bmin < math.huge then
-			print(i, tl.bmin, tl.bmax)
 			for bi = 1, (tl.bmax - tl.bmin + 1) do
 				local numbrush = tl.bmin + bi
 				brushes[numbrush].bmodel = i
