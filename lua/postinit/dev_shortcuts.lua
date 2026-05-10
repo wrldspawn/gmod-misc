@@ -75,7 +75,7 @@ do -- better tostrings
 	local NPC = FindMetaTable("NPC")
 	NPC.__tostring = ENTITY.__tostring
 
-	local VECTOR = FindMetaTable("Vector")
+	--[[local VECTOR = FindMetaTable("Vector")
 	function VECTOR:__tostring()
 		return Format("Vector(%0.6f, %0.6f, %0.6f)", self:Unpack())
 	end
@@ -88,7 +88,7 @@ do -- better tostrings
 	local COLOR = FindMetaTable("Color")
 	function COLOR:__tostring()
 		return Format("Color(%d, %d, %d, %d)", self:Unpack())
-	end
+	end--]]
 
 	local dummy_func = function() end
 	local FUNCTION = debug.getmetatable(dummy_func) or {}
