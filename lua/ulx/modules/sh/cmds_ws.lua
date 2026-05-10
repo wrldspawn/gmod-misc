@@ -124,3 +124,102 @@ giveammo:addParam({ type = ULib.cmds.BoolArg, invisible = true })
 giveammo:defaultAccess(ULib.ACCESS_ADMIN)
 giveammo:help("Give target(s) ammo.")
 giveammo:setOpposite("ulx setammo", { nil, nil, nil, true }, "!setammo")
+
+if util.IsBinaryModuleInstalled("workshop") then
+	pcall(require, "workshop")
+	if steamworks.DownloadUGC then
+		local ulx_votemapVetotime = GetConVar("ulx_votemapVetotime")
+
+		function ulx.wsmap(calling_ply, wsid)
+			if wsid == nil then return end
+
+			ulx.fancyLogAdmin(calling_ply, "#A attempting to download workshop addon #q", wsid)
+			steamworks.FileInfo(wsid, function(info)
+				if info == nil then
+					Msg("[wsmap] ")
+					print(string.format("Failed to fetch info for %q", wsid))
+					ULib.tsay(calling_ply, "Failed to fetch workshop addon info", true)
+					return
+				end
+
+				ULib.tsay(nil, string.format("Server is now downloading %q...", info.title or wsid), true)
+				steamworks.DownloadUGC(wsid, function(path, _f)
+					if path == nil then
+						Msg("[wsmap] ")
+						print(string.format("Failed to download %q", wsid))
+						ULib.tsay(nil, "Failed to download workshop addon", true)
+						return
+					end
+
+					ULib.tsay(nil, "Server is now mounting addon", true)
+					local succ, files = game.MountGMA(path)
+					if not succ then
+						Msg("[wsmap] ")
+						print(string.format("Failed to mount %q", wsid))
+						ULib.tsay(nil, "Failed to mount workshop addon", true)
+						return
+					end
+
+					local map
+					for _, f in ipairs(files) do
+						if not string.match(f, "maps/.-%.bsp") then continue end
+						map = string.GetFileFromFilename(string.StripExtension(f))
+						break
+					end
+
+					if map == nil then
+						Msg("[wsmap] ")
+						print(string.format("Addon %q contains no maps", wsid))
+						ULib.tsay(nil, "Workshop addon has no maps", true)
+						return
+					end
+
+					local vetotime = ulx_votemapVetotime:GetInt()
+					local admins = {}
+					for _, ply in player.Iterator() do
+						if ply:IsConnected() and ULib.ucl.query(ply, "ulx veto") then
+							admins[#admins + 1] = ply
+						end
+					end
+
+					if #admins <= 0 or vetotime < 1 then
+						ULib.tsay(nil, string.format("Changing map to %q...", map), true)
+						ulx.logString(string.format("Changing to workshop map %q (%s)", map, wsid))
+						file.Write("wsmap_lastmap.txt", map .. ":" .. wsid)
+						game.ConsoleCommand("changelevel " .. map .. "\n")
+					else
+						ULib.tsay(nil, string.format("Changing map to %q in %d seconds", map, vetotime), true)
+						for _, ply in ipairs(admins) do
+							ULib.tsay(ply, 'To veto this map change, just say "!veto"', true)
+						end
+						ulx.logString(string.format("Changing to workshop map %q (%s). Pending admin veto.", map, wsid))
+						ulx.timedVeto = true
+						hook.Call(ulx.HOOK_VETO)
+						timer.Create("ULXVotemap", vetotime, 1, function()
+							file.Write("wsmap_lastmap.txt", map .. ":" .. wsid)
+							game.ConsoleCommand("changelevel " .. map .. "\n")
+						end)
+					end
+				end)
+			end)
+		end
+
+		local wsmap = ulx.command("Utility", "wsmap", ulx.wsmap, "!wsmap")
+		wsmap:addParam({
+			type = ULib.cmds.StringArg,
+			hint = "workshopid",
+		})
+		wsmap:defaultAccess(ULib.ACCESS_ADMIN)
+		wsmap:help("Download a map from the workshop and switch to it")
+	end
+end
+if file.Exists("wsmap_lastmap.txt", "DATA") then
+	local data = file.Read("wsmap_lastmap.txt", "DATA")
+	local split = string.Explode(":", data)
+	local map = split[1]
+	local wsid = split[2]
+
+	if map ~= nil and wsid ~= nil and game.GetMap() == map then
+		resource.AddWorkshop(wsid)
+	end
+end
