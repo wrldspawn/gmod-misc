@@ -74,6 +74,33 @@ fov:addParam({ type = ULib.cmds.NumArg, default = 0, min = 0, max = 256, hint = 
 fov:defaultAccess(ULib.ACCESS_ALL)
 fov:help("Set target(s) FOV.")
 
+function ulx.revive(calling_ply, target_plys)
+	if not target_plys[1]:IsValid() then return end
+
+	local affected_plys = {}
+	for _, ply in ipairs(target_plys) do
+		if ply:Alive() then continue end
+
+		local pos = ply:GetPos()
+		local ang = ply:EyeAngles()
+
+		ply:Spawn()
+		ply:SetPos(pos)
+		ply:SetEyeAngles(ang)
+
+		table.insert(affected_plys, ply)
+	end
+
+	if (#affected_plys == 1 and affected_plys[1] ~= calling_ply) or #affected_plys > 1 then
+		ulx.fancyLogAdmin(calling_ply, "#A revived #T", affected_plys)
+	end
+end
+
+local revive = ulx.command("Utility", "ulx revive", ulx.revive, "!fov")
+revive:addParam({ type = ULib.cmds.PlayersArg, ULib.cmds.optional })
+revive:defaultAccess(engine.ActiveGamemode() == "sandbox" and ULib.ACCESS_ALL or ULib.ACCESS_ADMIN)
+revive:help("Revive dead players")
+
 local gmod_maxammo = GetConVar("gmod_maxammo")
 function ulx.giveammo(calling_ply, target_plys, amount, setammo)
 	if not target_plys[1]:IsValid() then return end
@@ -121,7 +148,7 @@ giveammo:addParam({
 	ULib.cmds.round
 })
 giveammo:addParam({ type = ULib.cmds.BoolArg, invisible = true })
-giveammo:defaultAccess(ULib.ACCESS_ADMIN)
+giveammo:defaultAccess(engine.ActiveGamemode() == "sandbox" and ULib.ACCESS_ALL or ULib.ACCESS_ADMIN)
 giveammo:help("Give target(s) ammo.")
 giveammo:setOpposite("ulx setammo", { nil, nil, nil, true }, "!setammo")
 
@@ -204,7 +231,7 @@ if util.IsBinaryModuleInstalled("workshop") then
 			end)
 		end
 
-		local wsmap = ulx.command("Utility", "wsmap", ulx.wsmap, "!wsmap")
+		local wsmap = ulx.command("Utility", "ulx wsmap", ulx.wsmap, "!wsmap")
 		wsmap:addParam({
 			type = ULib.cmds.StringArg,
 			hint = "workshopid",

@@ -152,7 +152,7 @@ elseif CLIENT then
 				local color = hook.Run("GetTeamColor", ply)
 				teamcolors[ply:UserID()] = color
 
-				chat.AddText(COLOR_GREEN, "\xE2\x80\xA3 ", color, name, COLOR_GRAY, " (" .. steamid .. ") ", COLOR_WHITE,
+				chat.AddText(COLOR_GREEN, "\xE2\x96\xB8 ", color, name, COLOR_GRAY, " (" .. steamid .. ") ", COLOR_WHITE,
 					"has spawned")
 			end)
 		elseif msg == MSG_UPDATE_COLOR then
