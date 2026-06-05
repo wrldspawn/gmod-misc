@@ -409,6 +409,7 @@ local function collectTriggerBrushes()
 		}
 		for k, v in next, trigger do
 			if not string.match(k, "^On") then continue end
+			if string.lower(k) == "onlyfallingplayers" then continue end
 			info.outputs[k] = v
 		end
 
@@ -972,11 +973,11 @@ hook.Add("HUDPaint", "showtriggers", function()
 				trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)
 
 			for on, outputs in next, trigger.outputs do
-				if isstring(outputs) then
-					picktext.AddLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+				if not istable(outputs) then
+					picktext.AddLine(lines, tostring(outputs):gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 				else
 					for _, output in ipairs(outputs) do
-						picktext.AddLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						picktext.AddLine(lines, output:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 					end
 				end
 			end
