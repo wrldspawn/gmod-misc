@@ -1,3 +1,5 @@
+if not game.IsDedicated() then return end
+
 local enabled = CreateConVar("sv_idlerestart", "1", FCVAR_ARCHIVE, "Automatically restart the server when empty", 0, 1)
 
 local restarting = false
