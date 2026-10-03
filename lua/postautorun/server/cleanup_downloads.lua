@@ -1,4 +1,5 @@
 if not HolyLib then return end
+if not game.IsDedicated() then return end
 
 local TO_REMOVE = {
 	"materials/icon64/outfitter.png",
