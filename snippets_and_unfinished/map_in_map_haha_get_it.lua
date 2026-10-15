@@ -4,6 +4,7 @@ local TAG = "map in map haha get it"
 
 mim_meshes = mim_meshes or {}
 mim_leaves = mim_leaves or {}
+mim_skybox_meshes = mim_skybox_meshes or {}
 
 local function destroy()
 	for _, obj in next, mim_meshes do
@@ -26,14 +27,24 @@ local function destroy()
 			end
 		end
 	end
-
-	collectgarbage()
-	collectgarbage()
+	for _, obj in ipairs(mim_skybox_meshes) do
+		if type(obj) == "table" then
+			for _, obj2 in next, obj do
+				if obj2:IsValid() then obj2:Destroy() end
+			end
+		else
+			if obj:IsValid() then obj:Destroy() end
+		end
+	end
 end
 destroy()
 
 table.Empty(mim_meshes)
 table.Empty(mim_leaves)
+table.Empty(mim_skybox_meshes)
+
+collectgarbage()
+collectgarbage()
 
 hook.Add("ShutDown", TAG, function()
 	destroy()
@@ -54,30 +65,31 @@ end)
 			255
 end--]]
 
-local skip_textures = {
-	["tools/toolsskybox"] = true,
-	["tools/toolsskybox2d"] = true,
-}
-
 local MAX_COORD = 16384
 
 -- correct(-ish) lighting example when no skybox
 --local MAP = NikNaks.Map("oc_stitches_1")
---local OFFSET = Vector(-5120, 2048, 2048) -- gm_construct as test map
+--local OFFSET = Vector(-5120, 2048, 2048) -- in gm_construct
 
 --local MAP = NikNaks.CurrentMap
-local MAP = NikNaks.Map("keyfox_lobby_summer")
--- gm_construct as test map
+local MAP = NikNaks.Map("gm_construct_m3_401")
+
+-- in gm_construct
 --local OFFSET = Vector(-384, 128, 1024)
 --local OFFSET = Vector(-2048, 2048, 3072)
 --local OFFSET = Vector(0, 0, 3072)
 --local OFFSET = Vector(MAX_COORD * 2, 0, 0)
 
--- gm_landmass_aurora as test map
-local OFFSET = Vector(0, 0, 4200)
+-- in gm_landmass_aurora
+--local OFFSET = Vector(0, 0, 4200)
+--local OFFSET = Vector(0, 0, 4200 + 2100)
 --local OFFSET = Vector(0, 0, MAX_COORD + 4200)
 
-local SCALE_FACTOR = 1
+-- in gm_flatgrass
+local OFFSET = Vector(0, 0, -10000)
+--local OFFSET = Vector(0, 0, 6384)
+
+local SCALE_FACTOR = 8
 
 if InfMap then
 	SCALE_FACTOR = 1
@@ -92,26 +104,11 @@ MAP_MAX:Mul(MAX_COORD)
 
 local MAP_LEAVES = MAP:GetLeafs()
 
-mim_leaves[0] = {
-	sky = MAP:HasSkyBox(),
-	mins = MAP_MIN,
-	maxs = MAP_MAX,
-	meshes = {},
-	lights = {},
-	verts = {},
-}
-
 local SKYBOX_POS, SKYBOX_SCALE
 local skybox_leaves = {}
 local skycam = MAP:FindByClass("^sky_camera$")[1]
 if skycam then
-	local pvs = MAP:PVSForOrigin(skycam.origin)
-	for _, _leaf in ipairs(pvs:GetLeafs()) do
-		local i = _leaf.__id
-
-		skybox_leaves[i] = true
-	end
-	SKYBOX_POS = skycam.origin
+	SKYBOX_POS = skycam.origin / SCALE_FACTOR
 	SKYBOX_SCALE = skycam.scale
 end
 
@@ -122,11 +119,16 @@ local function do_face(pos, vert, vmid)
 	mesh.TexCoord(0, vert.u, vert.v)
 	mesh.TexCoord(1, vert.u1, vert.v1)
 	mesh.Normal(vert.normal)
-	local tx = vert.tangent and vert.tangent.x or 0
-	local ty = vert.tangent and vert.tangent.y or 0
-	local tz = vert.tangent and vert.tangent.z or 0
-	mesh.UserData(tx, ty, tz, 0)
-	mesh.Specular(1, 1, 1, 1)
+	if vert.binormal then
+		mesh.TangentS(vert.binormal)
+	end
+	if vert.tangent then
+		mesh.TangentT(vert.tangent)
+	end
+	mesh.UserData(unpack(vert.userdata))
+	if vert.color then
+		mesh.Specular(vert.color:Unpack())
+	end
 	--mesh.Color(calc_lighting(pos + (vmid - pos):GetNormalized(), vert.normal))
 	mesh.AdvanceVertex()
 end
@@ -138,6 +140,11 @@ local VECTOR = FindMetaTable("Vector")
 local V_LengthSqr = VECTOR.LengthSqr
 local WithinAABox = VECTOR.WithinAABox
 
+local skip_textures = {
+	--["tools/toolsskybox"] = true,
+	--["tools/toolsskybox2d"] = true,
+}
+local displacementTextures = {}
 local function generate_map_meshes()
 	--for i, cluster in next, mim_clusters do
 	--local faces = cluster.faces
@@ -146,7 +153,7 @@ local function generate_map_meshes()
 		if #faces < 1 then continue end
 
 		local l = {
-			sky = skybox_leaves[i] and MAP:HasSkyBox() or leaf:HasSkyboxInPVS(),
+			sky = leaf:HasSkyboxInPVS(),
 			mins = leaf.mins,
 			maxs = leaf.maxs,
 			meshes = {},
@@ -179,6 +186,10 @@ local function generate_map_meshes()
 			tex = tex:gsub("%.vmt$", "")
 			if skip_textures[tex] then continue end
 
+			if face.dispinfo ~= -1 then
+				displacementTextures[tex] = true
+			end
+
 			if not texture_verts[tex] then texture_verts[tex] = {} end
 			local verts = texture_verts[tex]
 			verts[#verts + 1] = face_vertices
@@ -209,16 +220,6 @@ local function generate_map_meshes()
 						local pos1 = v1.pos * 1
 						local pos2 = v2.pos * 1
 						local pos3 = v3.pos * 1
-
-						--[[if skybox_leaves[i] then
-							pos1:Sub(SKYBOX_POS)
-							pos2:Sub(SKYBOX_POS)
-							pos3:Sub(SKYBOX_POS)
-							-- 0.01 to prevent zfighting (for now until figuring out carving)
-							pos1:Mul(SKYBOX_SCALE + 0.01)
-							pos2:Mul(SKYBOX_SCALE + 0.01)
-							pos3:Mul(SKYBOX_SCALE + 0.01)
-						end--]]
 
 						if SCALE_FACTOR > 1 then
 							pos1:Div(SCALE_FACTOR)
@@ -275,21 +276,16 @@ local function generate_map_meshes()
 			--print(i, "IsValid", texture, imesh:IsValid())
 
 			--mim_meshes[texture] = imeshes
-			mim_leaves[i].meshes[texture] = imeshes
+			if texture == "tools/toolsskybox" or texture == "tools/toolsskybox2d" then
+				mim_skybox_meshes[i] = imeshes
+			else
+				mim_leaves[i].meshes[texture] = imeshes
+			end
 			--cluster.meshes[texture] = imeshes
 			co_yield(false, "built meshes for " .. texture .. " - leaf: " .. i)
 		end
 	end
 end
-
---[[local map_unlit = CreateMaterial("map_unlit", "UnlitGeneric", {
-	["$basetexture"] = "lights/white",
-	["$vertexcolor"] = 1,
-})
-
-local map_lit = CreateMaterial("map_lit", "VertexLitGeneric", {
-	["$basetexture"] = map_unlit:GetString("$basetexture")
-})--]]
 
 local fallback_texture = CreateMaterial("mim_fallback", "VertexLitGeneric", {
 	["$basetexture"] = "dev/dev_measuregeneric01b"
@@ -389,6 +385,7 @@ local function fix_materials()
 					print(texture, shader)
 					target[texture] = mat
 				else
+					--print("blacklisted shader", texture, shader)
 					local mat_kv = {
 						["$model"] = 1,
 						["$basetexture"] = mat:GetString("$basetexture"),
@@ -399,7 +396,10 @@ local function fix_materials()
 						mat_kv[trans_var] = 1
 					end
 
+					local newShader = "VertexLitGeneric"
 					if is_water then
+						newShader = "Refract"
+
 						mat_kv["$dudvmap"] = mat:GetString("$dudvmap") or mat:GetString("$bumpmap")
 						mat_kv["$refractamount"] = mat:GetFloat("$reflectamount")
 						mat_kv["$bumpframe"] = 0
@@ -417,8 +417,7 @@ local function fix_materials()
 						}
 					end
 
-					target[texture] = CreateMaterial("___mim___/" .. texture, is_water and "Refract" or "VertexLitGeneric",
-						mat_kv)
+					target[texture] = CreateMaterial("___mim___/" .. texture, newShader, mat_kv)
 					target[texture]:Recompute()
 				end
 
@@ -452,126 +451,6 @@ local function parseLightString(str)
 
 	return r, g, b, scaler
 end
-
---[[local ALL_LIGHTS = {}
-mim_processed_leaves = {}
-local function collect_lights()
-	for _, e in ipairs(MAP:FindByClass("^light")) do
-		if e.classname == "light_environment" then continue end
-
-		ALL_LIGHTS[#ALL_LIGHTS + 1] = e
-
-		local pvs = MAP:PVSForOrigin(e.origin)
-		local cluster = {
-			sky = false,
-			faces = {},
-			leaves = {},
-			verts = {},
-			meshes = {},
-			lights = {},
-		}
-		for _, _leaf in ipairs(pvs:GetLeafs()) do
-			local i = _leaf.__id
-			if mim_processed_leaves[i] then continue end
-			local leaf = MAP_LEAVES[i]
-
-			mim_processed_leaves[i] = true
-
-			local faces = leaf:GetFaces(true)
-			if #faces < 1 then continue end
-
-			cluster.leaves[i] = true
-
-			if not cluster.sky then
-				if leaf:HasSkyboxInPVS() then
-					cluster.sky = true
-				end
-			end
-
-			for _, face in ipairs(faces) do
-				if not face:IsWorld() then continue end
-
-				cluster.faces[#cluster.faces + 1] = face
-			end
-		end
-		mim_clusters[#mim_clusters + 1] = cluster
-	end
-
-	-- skybox separate cluster
-	local skycam = MAP:FindByClass("^sky_camera$")[1]
-	if skycam then
-		local pvs = MAP:PVSForOrigin(skycam.origin)
-		for _, _leaf in ipairs(pvs:GetLeafs()) do
-			local i = _leaf.__id
-			if mim_processed_leaves[i] then continue end
-			local leaf = MAP_LEAVES[i]
-
-			mim_processed_leaves[i] = true
-
-			local faces = leaf:GetFaces(true)
-			if #faces < 1 then continue end
-
-			local cluster = {
-				skybox = {
-					pos = skycam.origin,
-					scale = skycam.scale,
-				},
-				sky = true,
-				faces = {},
-				leaves = {},
-				verts = {},
-				meshes = {},
-				lights = {},
-			}
-
-			cluster.leaves[i] = true
-
-			for _, face in ipairs(faces) do
-				if not face:IsWorld() then continue end
-
-				cluster.faces[#cluster.faces + 1] = face
-			end
-			mim_clusters[#mim_clusters + 1] = cluster
-		end
-	end
-
-	-- still split remaining leaves into their own clusters out of laziness
-	for i, leaf in next, MAP_LEAVES do
-		if mim_processed_leaves[i] then continue end
-
-		local faces = leaf:GetFaces(true)
-		if #faces < 1 then continue end
-
-		local cluster = {
-			sky = leaf:HasSkyboxInPVS(),
-			faces = {},
-			leaves = {},
-			verts = {},
-			meshes = {},
-			lights = {},
-		}
-
-		-- not ideal, rough estimation anyways
-		if not cluster.sky then
-			for _, aleaf in ipairs(leaf:GetAdjacentLeafs()) do
-				if aleaf:HasSkyboxInPVS() then
-					cluster.sky = true
-					break
-				end
-			end
-		end
-
-		cluster.leaves[i] = true
-
-		for _, face in ipairs(faces) do
-			if not face:IsWorld() then continue end
-
-			cluster.faces[#cluster.faces + 1] = face
-		end
-
-		mim_clusters[#mim_clusters + 1] = cluster
-	end
-end--]]
 
 local function FLerp5(f1, f2, i1, i2, x)
 	return f1 + (f2 - f1) * (x - i1) / (i2 - i1)
@@ -636,8 +515,37 @@ local function SolveInverseQuadraticMonotonic(x1, y1, x2, y2, x3, y3, a, b, c)
 	return true, a, b, c
 end
 
+local hasAnySkyLight = SKYBOX_POS == nil
 local function process_lights()
+	if SKYBOX_POS then
+		local startleaf = MAP:PointInLeaf(0, SKYBOX_POS * SCALE_FACTOR)
+		for _, leaf in next, MAP_LEAVES do
+			if leaf.cluster ~= startleaf.cluster then continue end
+			skybox_leaves[leaf.__id] = true
+		end
+
+		-- FIXME: recurse
+		local adj = startleaf:GetAdjacentLeafs(0)
+		for _, aleaf in ipairs(adj) do
+			local i = aleaf.__id
+			local l = mim_leaves[i]
+			if not l then continue end
+			if #l.verts < 1 then continue end
+
+			skybox_leaves[i] = true
+		end
+	end
+
 	if LIGHT_ENV then
+		for i in next, skybox_leaves do
+			local leaf = mim_leaves[i]
+
+			if leaf and leaf.sky then
+				hasAnySkyLight = true
+				break
+			end
+		end
+
 		local r, g, b, scaler = parseLightString(LIGHT_ENV._light)
 
 		local intensity = Vector()
@@ -720,6 +628,7 @@ local function process_lights()
 	--for li, FIRST_LIGHT in ipairs(ALL_LIGHTS) do
 	for li, FIRST_LIGHT in ipairs(MAP:FindByClass("^light")) do
 		if FIRST_LIGHT.classname == "light_environment" then continue end
+		if FIRST_LIGHT.spawnflags == 1 then continue end -- off by default
 
 		--print(li, FIRST_LIGHT.origin)
 
@@ -797,8 +706,8 @@ local function process_lights()
 
 			local v50 = z + d50 * (y + d50 * x)
 			local scale = 2 / v50
-			x = x * scale
 			y = y * scale
+			x = x * scale
 			z = z * scale
 
 			if FIRST_LIGHT._hardfalloff then
@@ -848,10 +757,32 @@ local function process_lights()
 		--[[if #leaf.lights > 4 then
 			print("leaf " .. i .. " has over 4 lights:", #leaf.lights)
 		end--]]
-		if #leaf.lights < 1 then continue end
-		if leaf.sky and LIGHT_ENV then continue end -- FIXME: hack for winter_lobby_2012 and maybe some other maps idk
 
 		local realLeaf = MAP_LEAVES[i]
+
+		for _, aleaf in ipairs(realLeaf:GetAdjacentLeafs(0)) do
+			local li = aleaf.__id
+			local l = mim_leaves[li]
+			if not l then continue end
+			if #l.lights < 1 then continue end
+
+			for _, light in ipairs(l.lights) do
+				leaf.lights[#leaf.lights + 1] = light
+			end
+		end
+
+		local has = {}
+		local newLights = {}
+		for _, v in ipairs(leaf.lights) do
+			if not has[v] then
+				newLights[#newLights + 1] = v
+				has[v] = true
+			end
+		end
+		leaf.lights = newLights
+
+		if #leaf.lights < 1 then continue end
+		if leaf.sky and LIGHT_ENV and hasAnySkyLight then continue end -- FIXME: hack for winter_lobby_2012 and maybe some other maps idk
 
 		--local center = (leaf.mins + leaf.maxs) / 2
 		table.sort(leaf.lights, function(a, b)
@@ -878,7 +809,7 @@ local function process_lights()
 end
 
 local threads = {}
-local THREAD_THRESHOLD = 0.03
+local THREAD_THRESHOLD = 0.01
 
 hook.Add("Think", "mim_threader", function()
 	for i, thread in ipairs(threads) do
@@ -906,13 +837,13 @@ hook.Add("Think", "mim_threader", function()
 end)
 
 table.insert(threads, coroutine.create(function()
-	--collect_lights()
 	generate_map_meshes()
 	fix_materials()
 	process_lights()
 	co_yield(true)
 end))
 
+local ambientColors = {}
 local function draw_meshes(target, skybox)
 	if skybox == nil then skybox = false end
 
@@ -922,13 +853,27 @@ local function draw_meshes(target, skybox)
 	for i, leaf in next, mim_leaves do
 		if not skybox and skybox_leaves[i] then continue end
 		if skybox and not skybox_leaves[i] then continue end
+
+		local realLeaf = MAP_LEAVES[i]
+
+		local ambCol = ambientColors[i]
+		if not ambCol then
+			local center = (leaf.mins + leaf.maxs) / 2
+			ambCol = realLeaf:CalculateAmbientColor(center, render.GetHDREnabled() and MAP:HasBakedHDRStaticPropLighting())
+			ambientColors[i] = ambCol
+		end
+		render.ResetModelLighting(ambCol.r / 255, ambCol.g / 255, ambCol.b / 255)
+
 		--print("rendering leaf", i)
-		if leaf.sky and LIGHT_ENV then
+		if ambCol.r == 0 and ambCol.g == 0 and ambCol.b == 0 and leaf.sky and LIGHT_ENV and hasAnySkyLight then
 			if SKY_HAS_AMBIENT then
 				render.ResetModelLighting(LIGHT_SKY_AMB.color:Unpack())
 			else
 				render.ResetModelLighting(target_light:Unpack())
 			end
+		end
+
+		if leaf.sky and LIGHT_ENV and hasAnySkyLight then
 			render.SetLocalModelLights({
 				LIGHT_SKY,
 				LIGHT_SKY_AMB,
@@ -936,7 +881,6 @@ local function draw_meshes(target, skybox)
 				leaf.lights[2],
 			})
 		else
-			render.ResetModelLighting(0, 0, 0)
 			render.SetLocalModelLights(leaf.lights)
 		end
 		--render.SetModelLighting(BOX_FRONT, 1, 1, 1)
@@ -960,6 +904,32 @@ local function draw_meshes(target, skybox)
 	render.SuppressEngineLighting(false)
 end
 
+local function draw_meshes_for_stencil(target, skybox)
+	if skybox == nil then skybox = false end
+
+	render.SuppressEngineLighting(true)
+	render.ResetModelLighting(0, 0, 0)
+	render.SetLocalModelLights()
+	render.SetMaterial(fallback_texture)
+	render.OverrideColorWriteEnable(true, false)
+	for i, leaf in next, mim_leaves do
+		if not skybox and skybox_leaves[i] then continue end
+		if skybox and not skybox_leaves[i] then continue end
+
+		for texture, meshes in next, leaf.meshes do
+			if not target[texture] then continue end
+			if #meshes < 1 then continue end
+
+			for _, obj in ipairs(meshes) do
+				if not obj:IsValid() then continue end
+				obj:Draw()
+			end
+		end
+	end
+	render.OverrideColorWriteEnable(false, false)
+	render.SuppressEngineLighting(false)
+end
+
 local ANG_ZERO = Angle()
 local LEAF_COLOR = Color(0, 0, 255)
 local SHOW_LEAVES = false
@@ -968,17 +938,207 @@ local DEBUG_MAXS = Vector(16, 16, 16)
 local DEBUG_MINS = DEBUG_MAXS * -1
 
 local SKYBOX_MATRIX = Matrix()
-SKYBOX_MATRIX:Translate(SKYBOX_POS * -1)
-local s = SKYBOX_SCALE + 0.01
-SKYBOX_MATRIX:Scale(Vector(s, s, s))
+if SKYBOX_POS then
+	local s = SKYBOX_SCALE
+
+	local o = Vector()
+	o:Set(OFFSET)
+	o:Mul(-s)
+	o:Add(OFFSET)
+
+	local p = Vector()
+	p:Set(SKYBOX_POS)
+	p:Mul(-s)
+	p:Add(o)
+
+	SKYBOX_MATRIX:Translate(p)
+	SKYBOX_MATRIX:Scale(Vector(s, s, s))
+end
+local NO_HDR = Vector(0.6, 0, 0)
+
+local function draw_world(target)
+	-- skybox carving
+	-- FIXME: doesn't work on flatgrass and construct
+	-- FIXME: bad zindexing (flashlight fixes it???)
+	if SKYBOX_POS then
+		render.ClearStencil()
+		render.SetStencilWriteMask(255)
+		render.SetStencilTestMask(255)
+		render.SetStencilPassOperation(STENCILOPERATION_KEEP)
+		render.SetStencilZFailOperation(STENCILOPERATION_KEEP)
+
+		render.SetStencilEnable(true)
+
+		render.SetStencilReferenceValue(1)
+		render.SetStencilCompareFunction(STENCILCOMPARISONFUNCTION_ALWAYS)
+		render.SetStencilPassOperation(STENCILOPERATION_REPLACE)
+
+		draw_meshes_for_stencil(target)
+
+		render.SetStencilFailOperation(STENCILOPERATION_REPLACE)
+		render.SetStencilPassOperation(STENCILOPERATION_ZERO)
+		render.SetStencilCompareFunction(STENCILCOMPARISONFUNCTION_EQUAL)
+
+		render.ClearBuffersObeyStencil(0, 0, 0, 255, true)
+
+		cam.PushModelMatrix(SKYBOX_MATRIX, true)
+		draw_meshes(target, true)
+		cam.PopModelMatrix()
+
+		render.SetStencilEnable(false)
+	end
+
+	draw_meshes(target)
+end
+
+local DEFAULT_SKY = "militia_hdr"
+local skyname = MAP:FindByClass("^worldspawn$")[1].skyname or DEFAULT_SKY
+if not file.Exists("materials/skybox/" .. skyname .. "up.vmt", "GAME") then
+	skyname = DEFAULT_SKY
+end
+if skyname == "painted" then
+	skyname = DEFAULT_SKY
+end
+
+mim_sky_precache = mim_sky_precache or {}
+
+local function precache_sky(name)
+	mim_sky_precache[name] = {
+		back = Material("skybox/" .. name .. "bk"),
+		front = Material("skybox/" .. name .. "ft"),
+		left = Material("skybox/" .. name .. "lf"),
+		right = Material("skybox/" .. name .. "rt"),
+		up = Material("skybox/" .. name .. "up"),
+		down = Material("skybox/" .. name .. "dn")
+	}
+end
+if not mim_sky_precache[skyname] then precache_sky(skyname) end
+
+local draw_skybox
+do
+	local mappings = {
+		back = {
+			pos = Vector(0, 1, 0),
+			norm = Vector(0, -1, 0)
+		},
+		front = {
+			pos = Vector(0, -1, 0),
+			norm = Vector(0, 1, 0)
+		},
+		left = {
+			pos = Vector(-1, 0, 0),
+			norm = Vector(1, 0, 0)
+		},
+		right = {
+			pos = Vector(1, 0, 0),
+			norm = Vector(-1, 0, 0)
+		},
+		up = {
+			pos = Vector(0, 0, 1),
+			norm = Vector(0, 0, -1)
+		},
+		down = {
+			pos = Vector(0, 0, -1),
+			norm = Vector(0, 0, 1)
+		}
+	}
+
+	local VEC_ZERO = Vector()
+	local VEC_UP = Vector(0, 0, 1)
+	local VEC_NORM_DOWN = Vector(0, 0, -1)
+	local COLOR_WHITE = Color(255, 255, 255)
+
+	local function draw_skybox_for_stencil()
+		render.SuppressEngineLighting(true)
+		render.ResetModelLighting(0, 0, 0)
+		render.SetLocalModelLights()
+		render.SetMaterial(fallback_texture)
+		render.OverrideColorWriteEnable(true, false)
+
+		for leaf, meshes in next, mim_skybox_meshes do
+			local leaf3d = skybox_leaves[leaf]
+
+			if leaf3d then
+				cam.PushModelMatrix(SKYBOX_MATRIX, true)
+			end
+
+			for _, obj in ipairs(meshes) do
+				if not obj:IsValid() then continue end
+				obj:Draw()
+			end
+
+			if leaf3d then
+				cam.PopModelMatrix()
+			end
+		end
+		render.OverrideColorWriteEnable(false, false)
+		render.SuppressEngineLighting(false)
+	end
+
+	draw_skybox = function()
+		local sky = mim_sky_precache[skyname]
+
+		if sky then
+			render.ClearStencil()
+			render.SetStencilWriteMask(255)
+			render.SetStencilTestMask(255)
+			render.SetStencilPassOperation(STENCILOPERATION_KEEP)
+			render.SetStencilZFailOperation(STENCILOPERATION_KEEP)
+
+			render.SetStencilEnable(true)
+
+			render.SetStencilReferenceValue(1)
+			render.SetStencilCompareFunction(STENCILCOMPARISONFUNCTION_ALWAYS)
+			render.SetStencilPassOperation(STENCILOPERATION_REPLACE)
+
+			draw_skybox_for_stencil()
+
+			render.SetStencilFailOperation(STENCILOPERATION_KEEP)
+			render.SetStencilCompareFunction(STENCILCOMPARISONFUNCTION_EQUAL)
+
+			render.ClearBuffersObeyStencil(0, 0, 0, 255, true)
+
+			local tone = render.GetToneMappingScaleLinear()
+			render.SetToneMappingScaleLinear(NO_HDR)
+			render.SuppressEngineLighting(true)
+			render.OverrideDepthEnable(true, false)
+			render.SetWriteDepthToDestAlpha(false)
+
+			cam.Start3D(VEC_ZERO, EyeAngles())
+
+			for side, mat in next, sky do
+				local map = mappings[side]
+				local pos = map and map.pos or VEC_UP
+				local norm = map and map.norm or VEC_NORM_DOWN
+
+				render.SetMaterial(mat)
+				render.DrawQuadEasy(pos * 5120, norm, 10240, 10240, COLOR_WHITE, (side == "up" or side == "down") and 0 or 180)
+			end
+
+			cam.End3D()
+
+			render.SetWriteDepthToDestAlpha(true)
+			render.OverrideDepthEnable(false, false)
+			render.SuppressEngineLighting(false)
+			render.SetToneMappingScaleLinear(tone)
+
+			render.SetStencilEnable(false)
+		end
+	end
+end
+
+
 hook.Add("PostDrawOpaqueRenderables", TAG, function(depth, skybox, skybox3d)
 	if skybox then return end
 
-	cam.PushModelMatrix(SKYBOX_MATRIX, true)
-	draw_meshes(mim_mat_cache, true)
-	cam.PopModelMatrix()
+	local oldFog = render.GetFogMode()
+	render.FogMode(MATERIAL_FOG_NONE)
+	local tone = render.GetToneMappingScaleLinear()
+	render.SetToneMappingScaleLinear(NO_HDR)
 
-	draw_meshes(mim_mat_cache)
+	draw_skybox()
+
+	draw_world(mim_mat_cache)
 
 	for i, leaf in next, mim_leaves do
 		if #leaf.verts < 1 then continue end
@@ -1015,16 +1175,30 @@ hook.Add("PostDrawOpaqueRenderables", TAG, function(depth, skybox, skybox3d)
 			end
 		end
 	end
+
+	render.SetToneMappingScaleLinear(tone)
+	render.FogMode(oldFog)
 end)
 
 hook.Add("PreDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d)
 	if skybox then return end
 
-	cam.PushModelMatrix(SKYBOX_MATRIX)
-	draw_meshes(mim_mat_cache, true)
+	local oldFog = render.GetFogMode()
+	render.FogMode(MATERIAL_FOG_NONE)
+	local tone = render.GetToneMappingScaleLinear()
+	render.SetToneMappingScaleLinear(NO_HDR)
+
+	-- TODO: transparent skybox carving
+	-- dont know how to make a stencil render whats behind it normally
+
+	cam.PushModelMatrix(SKYBOX_MATRIX, true)
+	draw_meshes(mim_mat_cache_trans, true)
 	cam.PopModelMatrix()
 
 	draw_meshes(mim_mat_cache_trans)
+
+	render.SetToneMappingScaleLinear(tone)
+	render.FogMode(oldFog)
 end)
 
 local inCalcView = false
