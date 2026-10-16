@@ -72,7 +72,7 @@ local MAX_COORD = 16384
 --local OFFSET = Vector(-5120, 2048, 2048) -- in gm_construct
 
 --local MAP = NikNaks.CurrentMap
-local MAP = NikNaks.Map("gm_construct_m3_401")
+local MAP = NikNaks.Map("oc_lobby")
 
 -- in gm_construct
 --local OFFSET = Vector(-384, 128, 1024)
@@ -86,10 +86,13 @@ local MAP = NikNaks.Map("gm_construct_m3_401")
 --local OFFSET = Vector(0, 0, MAX_COORD + 4200)
 
 -- in gm_flatgrass
-local OFFSET = Vector(0, 0, -10000)
+--local OFFSET = Vector(0, 0, -10000)
 --local OFFSET = Vector(0, 0, 6384)
 
-local SCALE_FACTOR = 8
+-- hacked map gm_wireconstruct_rc_2x/8x
+local OFFSET = Vector()
+
+local SCALE_FACTOR = 1
 
 if InfMap then
 	SCALE_FACTOR = 1
@@ -103,6 +106,7 @@ MAP_MIN:Mul(-1)
 MAP_MAX:Mul(MAX_COORD)
 
 local MAP_LEAVES = MAP:GetLeafs()
+local MAP_BMODELS = MAP:GetBModels()
 
 local SKYBOX_POS, SKYBOX_SCALE
 local skybox_leaves = {}
@@ -145,9 +149,122 @@ local skip_textures = {
 	--["tools/toolsskybox2d"] = true,
 }
 local displacementTextures = {}
+
+local function verts_to_meshes(verts, id)
+	local meshes = {}
+	--print(i, "BUILD", texture)
+
+	local meshObj = Mesh()
+	local vertcount = 0
+	for _, fv in ipairs(verts) do
+		vertcount = vertcount + #fv
+	end
+	--[[if vertcount > 65535 then
+		print("overflow, how", i, texture, vertcount)
+	end--]]
+
+	if vertcount == 0 then return meshes end
+
+	mesh.Begin(meshObj, MATERIAL_TRIANGLES, math.min(vertcount / 3, MAX_TRIANGLES))
+	for _, fv in ipairs(verts) do
+		for v = 1, #fv, 3 do
+			local succ, str = pcall(function()
+				local v1 = fv[v]
+				local v2 = fv[v + 1]
+				local v3 = fv[v + 2]
+
+				local pos1 = v1.pos * 1
+				local pos2 = v2.pos * 1
+				local pos3 = v3.pos * 1
+
+				if SCALE_FACTOR > 1 then
+					pos1:Div(SCALE_FACTOR)
+					pos2:Div(SCALE_FACTOR)
+					pos3:Div(SCALE_FACTOR)
+				end
+
+				if InfMap then
+					pos1:Set(InfMap.unlocalize_vector(pos1, OFFSET))
+					pos2:Set(InfMap.unlocalize_vector(pos2, OFFSET))
+					pos3:Set(InfMap.unlocalize_vector(pos3, OFFSET))
+				else
+					if OFFSET then
+						pos1:Add(OFFSET)
+						pos2:Add(OFFSET)
+						pos3:Add(OFFSET)
+					end
+				end
+
+				local vmid = (pos1 + pos2 + pos3) / 3
+
+				do_face(pos1, v1, vmid)
+				do_face(pos2, v2, vmid)
+				do_face(pos3, v3, vmid)
+			end)
+
+			if not succ then print(str) end
+		end
+
+		if mesh.VertexCount() >= MAX_TRIANGLES then
+			local o = 1
+			while vertcount > MAX_TRIANGLES do
+				--print(i, "BUILD (overflow) " .. o, texture)
+				mesh.End()
+				table.insert(meshes, meshObj)
+				--print(i, "IsValid (overflow) " .. o, texture, imesh:IsValid())
+
+				meshObj = Mesh()
+				mesh.Begin(meshObj, MATERIAL_TRIANGLES, math.min(vertcount - MAX_TRIANGLES, MAX_TRIANGLES))
+				vertcount = vertcount - MAX_TRIANGLES
+				o = o + 1
+				co_yield(false, "mesh overflow " .. (o - 1) .. " for " .. id)
+			end
+		end
+	end
+	mesh.End()
+	table.insert(meshes, meshObj)
+	--print(i, "IsValid", texture, meshObj:IsValid())
+
+	return meshes
+end
+
+local function split_faces_by_texture(faces, id)
+	local texture_verts = {}
+	for _, face in ipairs(faces) do
+		local face_vertices = face:GenerateVertexTriangleData()
+		if not face_vertices then continue end
+
+		local tex = face:GetTexture():lower()
+		if tex:match("^maps/") then
+			local fixed = tex:match("^maps/.-/(.-)_[-0-9]+_[-0-9]+_[-0-9]+$")
+			if fixed then
+				tex = fixed
+			else
+				fixed = tex:match("^maps/.-/(.-)_wvt_patch$")
+				if fixed then
+					tex = fixed
+				else
+					print("huh?", tex)
+				end
+			end
+		end
+		tex = tex:gsub("%.vmt$", "")
+		if skip_textures[tex] then continue end
+
+		if face.dispinfo ~= -1 then
+			displacementTextures[tex] = true
+		end
+
+		if not texture_verts[tex] then texture_verts[tex] = {} end
+		local verts = texture_verts[tex]
+		verts[#verts + 1] = face_vertices
+	end
+	co_yield(false, "split all faces in by texture for " .. id)
+
+	return texture_verts
+end
+
 local function generate_map_meshes()
-	--for i, cluster in next, mim_clusters do
-	--local faces = cluster.faces
 	for i, leaf in ipairs(MAP_LEAVES) do
 		local faces = leaf:GetFaces(true)
 		if #faces < 1 then continue end
@@ -162,127 +279,155 @@ local function generate_map_meshes()
 		}
 		mim_leaves[i] = l
 
-		local texture_verts = {}
+		local filtered_faces = {}
 		for _, face in ipairs(faces) do
 			if not face:IsWorld() then continue end
 
-			local face_vertices = face:GenerateVertexTriangleData()
-			if not face_vertices then continue end
-
-			local tex = face:GetTexture():lower()
-			if tex:match("^maps/") then
-				local fixed = tex:match("^maps/.-/(.-)_[-0-9]+_[-0-9]+_[-0-9]+$")
-				if fixed then
-					tex = fixed
-				else
-					fixed = tex:match("^maps/.-/(.-)_wvt_patch$")
-					if fixed then
-						tex = fixed
-					else
-						print("huh?", tex)
-					end
-				end
-			end
-			tex = tex:gsub("%.vmt$", "")
-			if skip_textures[tex] then continue end
-
-			if face.dispinfo ~= -1 then
-				displacementTextures[tex] = true
-			end
-
-			if not texture_verts[tex] then texture_verts[tex] = {} end
-			local verts = texture_verts[tex]
-			verts[#verts + 1] = face_vertices
+			filtered_faces[#filtered_faces + 1] = face
 		end
-		co_yield(false, "split all faces in cluster " .. i .. " by texture")
+
+		local texture_verts = split_faces_by_texture(filtered_faces, "leaf " .. i)
 
 		for texture, verts in next, texture_verts do
-			local imeshes = {}
-			--print(i, "BUILD", texture)
+			local meshes = verts_to_meshes(verts, texture .. " - leaf: " .. i)
 
-			local imesh = Mesh()
-			local vertcount = 0
-			for _, fv in ipairs(verts) do
-				vertcount = vertcount + #fv
-			end
-			--[[if vertcount > 65535 then
-				print("overflow, how", i, texture, vertcount)
-			end--]]
-
-			mesh.Begin(imesh, MATERIAL_TRIANGLES, math.min(vertcount / 3, MAX_TRIANGLES))
 			for _, fv in ipairs(verts) do
 				for v = 1, #fv, 3 do
-					local succ, str = pcall(function()
+					local v1 = fv[v]
+					local v2 = fv[v + 1]
+					local v3 = fv[v + 2]
+
+					local lv = mim_leaves[i].verts
+					lv[#lv + 1] = v1.pos
+					lv[#lv + 1] = v2.pos
+					lv[#lv + 1] = v3.pos
+				end
+			end
+
+			--mim_meshes[texture] = imeshes
+			if texture == "tools/toolsskybox" or texture == "tools/toolsskybox2d" then
+				mim_skybox_meshes[i] = meshes
+			else
+				mim_leaves[i].meshes[texture] = meshes
+			end
+			co_yield(false, "built meshes for " .. texture .. " - leaf: " .. i)
+		end
+	end
+
+	for i, e in ipairs(MAP:FindByClass("func_lod")) do
+		if not e.model:find("^%*") then continue end
+
+		local bidx = tonumber(e.model:sub(2))
+
+		local bmodel = MAP_BMODELS[bidx]
+		if bmodel == nil then continue end
+
+		local faces = bmodel:GetFaces()
+		if #faces < 1 then continue end
+
+		local texture_verts = split_faces_by_texture(faces, "func_lod " .. i)
+
+		for texture, verts in next, texture_verts do
+			local verts_per_leaf = {}
+
+			for _, fv in ipairs(verts) do
+				local vs = {}
+				local targetLeaf = 0
+				for v = 1, #fv, 3 do
+					local v1 = fv[v]
+					local v2 = fv[v + 1]
+					local v3 = fv[v + 2]
+
+					local pvs = MAP:PVSForOrigin(v1.pos)
+					pvs = MAP:PVSForOrigin(v2.pos, pvs)
+					pvs = MAP:PVSForOrigin(v3.pos, pvs)
+
+					local leaves = {}
+					for _, _leaf in ipairs(pvs:GetLeafs()) do
+						local _li = _leaf.__id
+						local leaf = mim_leaves[_li]
+						if not leaf then continue end
+						--if #leaf.verts < 1 then continue end
+
+						local len1 = _leaf:DistToSqr(v1.pos)
+						local len2 = _leaf:DistToSqr(v2.pos)
+						local len3 = _leaf:DistToSqr(v3.pos)
+
+						leaves[#leaves + 1] = { id = _li, len = len1 + len2 + len3 }
+					end
+
+					if #leaves < 1 then
+						for _, _leaf in ipairs(pvs:GetLeafs()) do
+							local _li = _leaf.__id
+
+							local len1 = _leaf:DistToSqr(v1.pos)
+							local len2 = _leaf:DistToSqr(v2.pos)
+							local len3 = _leaf:DistToSqr(v3.pos)
+
+							leaves[#leaves + 1] = { id = _li, len = len1 + len2 + len3 }
+						end
+					end
+
+					if #leaves < 1 then
+						print("failed to get leaf in pvs for lod :(", i)
+						continue
+					end
+
+					table.sort(leaves, function(a, b)
+						return a.len < b.len
+					end)
+					local li = leaves[1].id
+
+					if not mim_leaves[li] then
+						local leaf = MAP_LEAVES[li]
+						local l = {
+							sky = leaf:HasSkyboxInPVS(),
+							mins = leaf.mins,
+							maxs = leaf.maxs,
+							meshes = {},
+							lights = {},
+							verts = {},
+						}
+						mim_leaves[li] = l
+					end
+
+					vs[#vs + 1] = v1
+					vs[#vs + 1] = v2
+					vs[#vs + 1] = v3
+					targetLeaf = li
+				end
+
+				local vpf = verts_per_leaf[targetLeaf] or {}
+				vpf[#vpf + 1] = vs
+				verts_per_leaf[targetLeaf] = vpf
+			end
+			co_yield(false, "calculated leaves for " .. texture .. " - func_lod: " .. i)
+
+			for li, vs in next, verts_per_leaf do
+				local meshes = verts_to_meshes(vs, texture .. " - func_lod: " .. i)
+
+				if #meshes < 1 then continue end
+
+				for _, fv in ipairs(vs) do
+					for v = 1, #fv, 3 do
 						local v1 = fv[v]
 						local v2 = fv[v + 1]
 						local v3 = fv[v + 2]
 
-						local pos1 = v1.pos * 1
-						local pos2 = v2.pos * 1
-						local pos3 = v3.pos * 1
-
-						if SCALE_FACTOR > 1 then
-							pos1:Div(SCALE_FACTOR)
-							pos2:Div(SCALE_FACTOR)
-							pos3:Div(SCALE_FACTOR)
-						end
-
-						if InfMap then
-							pos1:Set(InfMap.unlocalize_vector(pos1, OFFSET))
-							pos2:Set(InfMap.unlocalize_vector(pos2, OFFSET))
-							pos3:Set(InfMap.unlocalize_vector(pos3, OFFSET))
-						else
-							if OFFSET then
-								pos1:Add(OFFSET)
-								pos2:Add(OFFSET)
-								pos3:Add(OFFSET)
-							end
-						end
-
-						local vmid = (pos1 + pos2 + pos3) / 3
-
-						do_face(pos1, v1, vmid)
-						do_face(pos2, v2, vmid)
-						do_face(pos3, v3, vmid)
-
-						local lv = mim_leaves[i].verts
+						local lv = mim_leaves[li].verts
 						lv[#lv + 1] = v1.pos
 						lv[#lv + 1] = v2.pos
 						lv[#lv + 1] = v3.pos
-						mim_leaves[i].verts = lv
-					end)
-
-					if not succ then print(str) end
-				end
-
-				if mesh.VertexCount() >= MAX_TRIANGLES then
-					local o = 1
-					while vertcount > MAX_TRIANGLES do
-						--print(i, "BUILD (overflow) " .. o, texture)
-						mesh.End()
-						table.insert(imeshes, imesh)
-						--print(i, "IsValid (overflow) " .. o, texture, imesh:IsValid())
-
-						imesh = Mesh()
-						mesh.Begin(imesh, MATERIAL_TRIANGLES, math.min(vertcount - MAX_TRIANGLES, MAX_TRIANGLES))
-						vertcount = vertcount - MAX_TRIANGLES
-						o = o + 1
-						co_yield(false, "mesh overflow " .. (o - 1) .. " for " .. texture .. " - leaf: " .. i)
 					end
 				end
-			end
-			mesh.End()
-			table.insert(imeshes, imesh)
-			--print(i, "IsValid", texture, imesh:IsValid())
 
-			--mim_meshes[texture] = imeshes
-			if texture == "tools/toolsskybox" or texture == "tools/toolsskybox2d" then
-				mim_skybox_meshes[i] = imeshes
-			else
-				mim_leaves[i].meshes[texture] = imeshes
+				local leaf = mim_leaves[li]
+				if not leaf.meshes[texture] then
+					leaf.meshes[texture] = {}
+				end
+				table.Add(leaf.meshes[texture], meshes)
+				co_yield(false, "built meshes for " .. texture .. " - func_lod: " .. i)
 			end
-			--cluster.meshes[texture] = imeshes
-			co_yield(false, "built meshes for " .. texture .. " - leaf: " .. i)
 		end
 	end
 end
@@ -983,10 +1128,10 @@ local function draw_world(target)
 
 		cam.PushModelMatrix(SKYBOX_MATRIX, true)
 		draw_meshes(target, true)
+		draw_meshes(mim_mat_cache_trans, true)
 		cam.PopModelMatrix()
-
-		render.SetStencilEnable(false)
 	end
+	render.SetStencilEnable(false)
 
 	draw_meshes(target)
 end
@@ -1078,7 +1223,7 @@ do
 	draw_skybox = function()
 		local sky = mim_sky_precache[skyname]
 
-		if sky then
+		if sky and table.Count(mim_skybox_meshes) > 0 then
 			render.ClearStencil()
 			render.SetStencilWriteMask(255)
 			render.SetStencilTestMask(255)
@@ -1127,14 +1272,20 @@ do
 	end
 end
 
+local tried_skyinfo = false
+local skyinfo
 
 hook.Add("PostDrawOpaqueRenderables", TAG, function(depth, skybox, skybox3d)
-	if skybox then return end
+	if not tried_skyinfo then
+		skyinfo = game.Get3DSkyboxInfo()
+		tried_skyinfo = true
+	end
+	if skyinfo and skybox then return end
 
 	local oldFog = render.GetFogMode()
 	render.FogMode(MATERIAL_FOG_NONE)
-	local tone = render.GetToneMappingScaleLinear()
-	render.SetToneMappingScaleLinear(NO_HDR)
+	--local tone = render.GetToneMappingScaleLinear()
+	--render.SetToneMappingScaleLinear(NO_HDR)
 
 	draw_skybox()
 
@@ -1176,28 +1327,25 @@ hook.Add("PostDrawOpaqueRenderables", TAG, function(depth, skybox, skybox3d)
 		end
 	end
 
-	render.SetToneMappingScaleLinear(tone)
+	--render.SetToneMappingScaleLinear(tone)
 	render.FogMode(oldFog)
 end)
 
 hook.Add("PreDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d)
-	if skybox then return end
+	if not tried_skyinfo then
+		skyinfo = game.Get3DSkyboxInfo()
+		tried_skyinfo = true
+	end
+	if skyinfo and skybox then return end
 
 	local oldFog = render.GetFogMode()
 	render.FogMode(MATERIAL_FOG_NONE)
-	local tone = render.GetToneMappingScaleLinear()
-	render.SetToneMappingScaleLinear(NO_HDR)
-
-	-- TODO: transparent skybox carving
-	-- dont know how to make a stencil render whats behind it normally
-
-	cam.PushModelMatrix(SKYBOX_MATRIX, true)
-	draw_meshes(mim_mat_cache_trans, true)
-	cam.PopModelMatrix()
+	--local tone = render.GetToneMappingScaleLinear()
+	--render.SetToneMappingScaleLinear(NO_HDR)
 
 	draw_meshes(mim_mat_cache_trans)
 
-	render.SetToneMappingScaleLinear(tone)
+	--render.SetToneMappingScaleLinear(tone)
 	render.FogMode(oldFog)
 end)
 
