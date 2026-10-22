@@ -809,10 +809,10 @@ hook.Add("HUDPaint", TAG, function()
 			if ent.outputs ~= nil then
 				for on, outputs in next, ent.outputs do
 					if isstring(outputs) then
-						picktext.AddLine(lines, outputs, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						picktext.AddLine(lines, outputs:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 					else
 						for _, output in ipairs(outputs) do
-							picktext.AddLine(lines, output, on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+							picktext.AddLine(lines, output:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
 						end
 					end
 				end

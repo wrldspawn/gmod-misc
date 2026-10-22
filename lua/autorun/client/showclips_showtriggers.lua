@@ -235,7 +235,12 @@ local function fixBrushModels()
 		elseif tl.bmin < math.huge then
 			for bi = 1, (tl.bmax - tl.bmin + 1) do
 				local numbrush = tl.bmin + bi
-				brushes[numbrush].bmodel = i
+				local brush = brushes[numbrush]
+				if brush then
+					brush.bmodel = i
+				else
+					print("missing brush", i)
+				end
 			end
 		end
 	end
