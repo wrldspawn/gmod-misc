@@ -261,6 +261,9 @@ local function collectClipBrushes()
 		local sky = false
 		local nodraw = true
 		for i = 1, brush.numsides do
+			local side = brush:GetSide(i)
+			if side.texinfo == -1 then continue end
+
 			local tex = brush:GetTexture(i):lower()
 			if tex ~= "tools/toolsinvisible" then
 				invis = false
@@ -893,6 +896,7 @@ local COLOR_FILTER = Color(231, 16, 148)
 local COLOR_FIELD = Color(192, 192, 192) -- temp color?
 
 local FORMAT_3 = "%.2f, %.2f, %.2f"
+local VEC_ZERO = Vector()
 
 local developer = GetConVar("developer")
 
@@ -918,7 +922,14 @@ hook.Add("HUDPaint", "showtriggers", function()
 		end)
 
 		for _, trigger in ipairs(to_render) do
-			local center = trigger.origin:ToScreen()
+			local pos = trigger.origin
+			local textPos = Vector(pos)
+			if pos == VEC_ZERO and trigger.mins then
+				textPos:Set(trigger.mins)
+				textPos:Add(trigger.maxs)
+				textPos:Div(2)
+			end
+			local center = textPos:ToScreen()
 
 			surface.SetFont("BudgetLabel")
 
@@ -971,8 +982,12 @@ hook.Add("HUDPaint", "showtriggers", function()
 			picktext.AddLine(lines, trigger.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
 			picktext.AddLine(lines, trigger.speed, "Speed: ", COLOR_FIELD, COLOR_TEXT)
 
-			local posStr = Format(FORMAT_3, trigger.origin:Unpack())
-			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, COLOR_TEXT)
+			local posStr = Format(FORMAT_3, pos:Unpack())
+			local posColor = COLOR_TEXT
+			if pos == VEC_ZERO and trigger.mins then
+				posColor = COLOR_INVALID
+			end
+			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, posColor)
 
 			picktext.AddLine(lines, trigger.target, "Destination: ", COLOR_DEST,
 				trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)

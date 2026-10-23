@@ -723,7 +723,14 @@ hook.Add("HUDPaint", TAG, function()
 			local pos = isvalid and entity:GetPos() or ent.origin
 			local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
 
-			local center = pos:ToScreen()
+			local textPos = Vector(pos)
+			if pos == VEC_ZERO and ent.mins and ent.maxs then
+				textPos:Set(ent.mins)
+				textPos:Add(ent.maxs)
+				textPos:Div(2)
+			end
+
+			local center = textPos:ToScreen()
 
 			local lines = {}
 			picktext.AddLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
@@ -784,7 +791,11 @@ hook.Add("HUDPaint", TAG, function()
 			end
 
 			local posStr = Format(FORMAT_3, Vector_Unpack(pos))
-			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, COLOR_TEXT)
+			local posCol = COLOR_TEXT
+			if pos == VEC_ZERO and ent.mins and ent.maxs then
+				posCol = COLOR_INVALID
+			end
+			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, posCol)
 
 			if ent.angle then
 				local angle = Format(FORMAT_3, Angle_Unpack(ang))
