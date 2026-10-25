@@ -959,9 +959,13 @@ do -- animation sequence overrides
 
 		local act = taunts[taunt]
 		if not act then
-			ply:SetNW2String("actx_taunt", "")
-			ply:SetNW2Float("actx_start", 0)
-			return
+			if taunt:match("^ACT_") and _G[taunt] ~= nil then
+				act = _G[taunt]
+			else
+				ply:SetNW2String("actx_taunt", "")
+				ply:SetNW2Float("actx_start", 0)
+				return
+			end
 		end
 		local override = sequence_overrides[taunt]
 		local seq = override or act
@@ -985,7 +989,7 @@ do -- animation sequence overrides
 		if CurTime() > start + len then
 			if SERVER then
 				if loop then
-					timer.Simple(0, function()
+					timer.Simple(engine.TickInterval(), function()
 						ply:SetNW2Float("actx_start", CurTime())
 						if override ~= nil then
 							ply:DoCustomAnimEvent(PLAYERANIMEVENT_CUSTOM_SEQUENCE, ACTX_EVENT)
@@ -1075,8 +1079,17 @@ if SERVER then
 
 		local act = taunts[taunt]
 		if act == nil then
-			ply:ChatPrint(string.format("Unknown act: %q", taunt))
-			return
+			if taunt:match("^ACT_") then
+				if _G[taunt] == nil then
+					ply:ChatPrint(string.format("Unknown act: %q", taunt))
+					return
+				else
+					act = _G[taunt]
+				end
+			else
+				ply:ChatPrint(string.format("Unknown act: %q", taunt))
+				return
+			end
 		end
 
 		if hook.Run("PlayerShouldTaunt", ply, act) == false then return end
