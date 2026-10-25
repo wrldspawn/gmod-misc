@@ -1,3 +1,10 @@
+hook.Add("PrePlayerDraw", "hands_shadow_fix", function(ply)
+	if not IsValid(ply) then return end
+
+	local hands = ply:GetHands()
+	if hands:IsValid() then hands:DestroyShadow() end
+end)
+
 hook.Add("PreDrawPlayerHands", "hands_shadow_fix", function(hands, vm, ply, wep)
 	hands:DestroyShadow()
 	local target = LocalPlayer():GetObserverTarget()
