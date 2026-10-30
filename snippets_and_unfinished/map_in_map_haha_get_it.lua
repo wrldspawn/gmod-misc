@@ -68,11 +68,11 @@ end--]]
 local MAX_COORD = 16384
 
 -- correct(-ish) lighting example when no skybox
---local MAP = NikNaks.Map("oc_stitches_1")
+local MAP = NikNaks.Map("oc_stitches_1")
 --local OFFSET = Vector(-5120, 2048, 2048) -- in gm_construct
 
 --local MAP = NikNaks.CurrentMap
-local MAP = NikNaks.Map("oc_lobby")
+--local MAP = NikNaks.Map("oc_lobby")
 
 -- in gm_construct
 --local OFFSET = Vector(-384, 128, 1024)
@@ -518,12 +518,18 @@ local function fix_materials()
 				local target = mim_mat_cache
 				local trans = false
 				local trans_var = "$translucent"
-				if is_water or kv["$translucent"] or kv["$alphatest"] or kv["$additive"] then
+				if is_water or kv["$translucent"] ~= "0" or kv["$alphatest"] ~= "0" or kv["$additive"] ~= "0" then
 					target = mim_mat_cache_trans
 					trans = true
 					if kv["$additive"] then
 						trans_var = "$additive"
 					end
+				end
+				local flags = kv["$flags"]
+				if bit.band(flags, bit.bor(bit.lshift(1, 7), bit.lshift(1, 21))) ~= 0 then -- MATERIAL_VAR_ADDITIVE_BIT, MATERIAL_VAR_TRANSLUCENT_BIT
+					trans_var = bit.band(flags, bit.lshift(1, 7)) ~= 0 and "$additive" or "$translucent"
+					target = mim_mat_cache_trans
+					trans = true
 				end
 
 				if not shader_blacklist[shader] then
@@ -536,6 +542,7 @@ local function fix_materials()
 						["$basetexture"] = mat:GetString("$basetexture"),
 						["$bumpmap"] = mat:GetString("$bumpmap"),
 						["$normalmap"] = mat:GetString("$normalmap"),
+						["$detail"] = mat:GetString("$detail"),
 					}
 					if trans then
 						mat_kv[trans_var] = 1
@@ -560,9 +567,17 @@ local function fix_materials()
 								texturescrollangle = 45.00,
 							}
 						}
+					elseif kv.Proxies then
+						mat_kv.Proxies = kv.Proxies
 					end
 
-					target[texture] = CreateMaterial("___mim___/" .. texture, newShader, mat_kv)
+					-- garrysmod-issues#2994
+					if system.IsLinux() then
+						mat_kv["$bumpmap"] = nil
+						mat_kv["$normalmap"] = nil
+					end
+
+					target[texture] = CreateMaterial("__mim__/" .. texture, newShader, mat_kv)
 					target[texture]:Recompute()
 				end
 
@@ -989,17 +1004,73 @@ table.insert(threads, coroutine.create(function()
 end))
 
 local ambientColors = {}
+local leaves_pvs = {}
 local function draw_meshes(target, skybox)
 	if skybox == nil then skybox = false end
 
 	render.SuppressEngineLighting(true)
 
-	--for i, leaf in next, mim_clusters do
+	local pos = EyePos() * SCALE_FACTOR
+
+	local cluster = MAP:ClusterFromPoint(pos)
+	local hasPvs = cluster > -1
+	local pvsLeaves = {}
+
+	if leaves_pvs[cluster] then
+		pvsLeaves = leaves_pvs[cluster]
+	else
+		if hasPvs then
+			local pvs = MAP:PVSForOrigin(pos)
+			local _pvsLeaves = pvs:GetLeafs()
+			local traverse
+			traverse = function(leaf, depth)
+				if depth == 5 then return end
+
+				local adj = leaf:GetAdjacentLeafs(0)
+				for _, aleaf in ipairs(adj) do
+					local ai = aleaf.__id
+					if skybox_leaves[ai] then continue end
+
+					local al = mim_leaves[ai]
+					if not al then continue end
+					if #al.verts < 1 then continue end
+
+					pvsLeaves[ai] = true
+
+					traverse(aleaf, depth + 1)
+				end
+			end
+
+			for i, leaf in next, _pvsLeaves do
+				if skybox_leaves[i] then continue end
+
+				local l = mim_leaves[i]
+				if not l then continue end
+				if #l.verts < 1 then continue end
+
+				pvsLeaves[i] = true
+
+				local depth = 1
+				traverse(leaf, depth)
+			end
+
+			leaves_pvs[cluster] = pvsLeaves
+		end
+	end
+
+	if table.Count(pvsLeaves) == 0 then
+		hasPvs = false
+	end
+
 	for i, leaf in next, mim_leaves do
 		if not skybox and skybox_leaves[i] then continue end
 		if skybox and not skybox_leaves[i] then continue end
 
 		local realLeaf = MAP_LEAVES[i]
+
+		if hasPvs and not skybox_leaves[i] then
+			if not pvsLeaves[i] then continue end
+		end
 
 		local ambCol = ambientColors[i]
 		if not ambCol then
@@ -1009,7 +1080,6 @@ local function draw_meshes(target, skybox)
 		end
 		render.ResetModelLighting(ambCol.r / 255, ambCol.g / 255, ambCol.b / 255)
 
-		--print("rendering leaf", i)
 		if ambCol.r == 0 and ambCol.g == 0 and ambCol.b == 0 and leaf.sky and LIGHT_ENV and hasAnySkyLight then
 			if SKY_HAS_AMBIENT then
 				render.ResetModelLighting(LIGHT_SKY_AMB.color:Unpack())
@@ -1028,10 +1098,6 @@ local function draw_meshes(target, skybox)
 		else
 			render.SetLocalModelLights(leaf.lights)
 		end
-		--render.SetModelLighting(BOX_FRONT, 1, 1, 1)
-		--render.SetModelLighting(BOX_LEFT, 1, 0, 0)
-		--render.SetModelLighting(BOX_RIGHT, 0, 1, 0)
-		--render.SetModelLighting(BOX_TOP, 0, 0, 1)
 
 		for texture, meshes in next, leaf.meshes do
 			if not target[texture] then continue end
