@@ -56,7 +56,7 @@ if SERVER then
 		net.Start(TAG)
 		net.WriteUInt(MSG_SPAWNED, 3)
 		net.WritePlayer(ply)
-		net.WriteString(ply:Name())
+		net.WriteString(ply:Nick())
 		net.WriteString(ply:SteamID())
 		net.Broadcast()
 	end)
