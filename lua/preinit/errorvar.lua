@@ -15,7 +15,7 @@ local function MsgN(...)
 
 	local str = table.concat(args, "")
 
-	if epoe then
+	if SERVER and epoe then
 		epoe.api.error(str)
 		epoe.RealPrint(str)
 	else

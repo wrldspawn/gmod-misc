@@ -492,6 +492,9 @@ local function GetMapEnts()
 			if mdl then
 				info.mins = mdl.HullMin
 				info.maxs = mdl.HullMax
+			else
+				info.mins = Vector(-BOUNDS, -BOUNDS, -BOUNDS)
+				info.maxs = Vector(BOUNDS, BOUNDS, BOUNDS)
 			end
 
 			table.insert(MAP_ENTS, info)
