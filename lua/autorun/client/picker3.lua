@@ -125,6 +125,7 @@ local ICON_COMMENT = Material("icon16/comment.png")
 local ICON_EFFECT = Material("icon16/wand.png")
 local ICON_GO = Material("icon16/bullet_go.png")
 local ICON_ITEM = Material("icon16/box.png")
+local ICON_LIGHT = Material("icon16/lightbulb.png")
 local ICON_LINK = Material("icon16/link.png")
 local ICON_MAKER = Material("icon16/brick_add.png")
 local ICON_MATERIAL = Material("icon16/image.png")
@@ -151,8 +152,10 @@ local ENT_ICONS = {
 	env_beam = ICON_VECTOR,
 	env_entity_maker = ICON_MAKER,
 	env_fog_controller = ICON_CLOUDS,
+	env_global = Material("icon16/world.png"),
 	env_gunfire = ICON_EFFECT,
 	env_laser = ICON_VECTOR,
+	env_lightglow = ICON_LIGHT,
 	env_physimpact = ICON_EFFECT,
 	env_smokestack = Material("icon16/fire.png"),
 	env_sound = ICON_SOUND,
@@ -161,18 +164,25 @@ local ENT_ICONS = {
 	env_speaker = ICON_SOUND,
 	env_splash = ICON_WATER,
 	env_steam = ICON_CLOUDS,
+	env_sun = Material("icon16/weather_sun.png"),
+	func_areaportal = Material("icon16/shading.png"),
+	func_areaportalwindow = Material("icon16/shading.png"),
 	func_ladderendpoint = ICON_TARGET,
 	func_useableladder = ICON_UP,
 	game_countdown_timer = Material("icon16/hourglass.png"),
 	game_score = Material("icon16/table_add.png"),
 	info_hint = ICON_GO,
+	info_ladder = ICON_UP,
 	info_ladder_dismount = ICON_TARGET,
+	info_particle_system = ICON_EFFECT,
+	info_null = Material("icon16/picture_empty.png"),
 	info_target = ICON_TARGET,
 	info_teleport_destination = ICON_TARGET,
 	info_waypoint = Material("icon16/exclamation.png"),
 	infodecal = ICON_MATERIAL,
 	keyframe_rope = ICON_VECTOR,
-	light_spot = Material("icon16/lightbulb.png"),
+	light_environment = Material("icon16/weather_cloudy.png"),
+	light_spot = ICON_LIGHT,
 	logic_choreographed_scene = ICON_CHOREO,
 	logic_merchant_relay = Material("icon16/cart.png"),
 	logic_playerproxy = Material("icon16/user_go.png"),
@@ -195,6 +205,7 @@ local ENT_ICONS = {
 	point_message = ICON_COMMENT,
 	point_message_multiplayer = ICON_COMMENT,
 	point_servercommand = ICON_COMMAND,
+	point_spotlight = ICON_LIGHT,
 	point_viewcontrol = ICON_CAMERA,
 	scripted_sequence = ICON_CHOREO,
 	water_lod_control = ICON_WATER,
@@ -384,6 +395,7 @@ local IGNORE = {
 	point_push = true,
 }
 
+local missingIcons = {}
 local function GetMapEnts()
 	if NikNaks then
 		local parseEntityData = getupvalues(NikNaks.__metatables.BSP.GetEntities).parseEntityData
@@ -476,6 +488,11 @@ local function GetMapEnts()
 				info.outputs[k] = v
 			end
 
+			if not ENT_ICONS[class] and not info.model and not missingIcons[class] then
+				print("missing icon", class, info.origin)
+				missingIcons[class] = true
+			end
+
 			table.insert(MAP_ENTS, info)
 		end
 
@@ -519,7 +536,7 @@ end
 
 local PICKER_ENABLED = false
 concommand.Add(TAG, function()
-	if table.Count(ENTITIES) == 0 then
+	if next(ENTITIES) == nil then
 		LocalPlayer():ChatPrint("Collecting entities, please wait...")
 		GetMapEnts()
 		for _, ent in ents.Iterator() do

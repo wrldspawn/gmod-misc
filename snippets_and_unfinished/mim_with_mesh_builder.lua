@@ -27,6 +27,8 @@ hook.Add("ShutDown", TAG, function()
 	destroy()
 end)
 
+local BUILDER = NikNaks.MeshBuilder()
+
 local MAX_COORD = 16384
 local VEC_ZERO = Vector()
 
@@ -44,7 +46,7 @@ mim_leaves[0] = {
 --local OFFSET = Vector(-5120, 2048, 2048) -- in gm_construct
 
 --local MAP = NikNaks.CurrentMap
-local MAP = NikNaks.Map("oc_lobby")
+local MAP = NikNaks.Map("gm_construct_m3_401")
 
 -- in gm_construct
 --local OFFSET = Vector(-384, 128, 1024)
@@ -104,6 +106,8 @@ local skip_textures = {
 local fallback_texture = CreateMaterial("mim_fallback", "VertexLitGeneric", {
 	["$basetexture"] = "dev/dev_measuregeneric01b"
 })
+
+local FACES_PER_YIELD = 10
 
 local function split_faces_by_texture(faces, id)
 	local texture_faces = {}
@@ -168,17 +172,26 @@ local function generate_map_meshes()
 
 		local texture_faces = split_faces_by_texture(filtered_faces, "leaf " .. i)
 
-		local builder = NikNaks.MeshBuilder()
-		local sky_builder = NikNaks.MeshBuilder()
-		for texture, faces in next, texture_faces do
+		for texture, tfaces in next, texture_faces do
 			if texture == "tools/toolsskybox" or texture == "tools/toolsskybox2d" then
-				sky_builder:AddFaces(faces, { material = fallback_texture, light = false })
-				mim_skybox_meshes[i] = sky_builder:Build()
+				for fi, face in ipairs(tfaces) do
+					BUILDER:AddFace(face, { material = fallback_texture, light = false })
+					if fi % FACES_PER_YIELD == FACES_PER_YIELD - 1 then co_yield(false) end
+				end
+				mim_skybox_meshes[i] = BUILDER:Build()
 			else
 				local m = texture == "__missing__" and fallback_texture or Material(texture)
-				builder:AddFaces(faces, { material = m, light = true })
-				mim_leaves[i].meshes[texture] = builder:Build()
+				for fi, face in ipairs(tfaces) do
+					BUILDER:AddFace(face, { material = m, light = true })
+					if fi % FACES_PER_YIELD == FACES_PER_YIELD - 1 then co_yield(false) end
+				end
+				mim_leaves[i].meshes[texture] = BUILDER:Build()
 			end
+
+			for _, face in ipairs(tfaces) do
+				face:ClearMeshData()
+			end
+
 			--co_yield(false)
 			co_yield(false, "built meshes for " .. texture .. " - leaf: " .. i)
 		end
@@ -200,11 +213,12 @@ local function generate_map_meshes()
 		local texture_faces = split_faces_by_texture(faces, "func_lod " .. i)
 
 		for texture, tfaces in next, texture_faces do
-			local builder = NikNaks.MeshBuilder()
-
 			local m = texture == "__missing__" and fallback_texture or Material(texture)
-			builder:AddFaces(tfaces, { material = m, light = true })
-			local meshObj = builder:Build()
+			for fi, face in ipairs(tfaces) do
+				BUILDER:AddFace(face, { material = m, light = true })
+				if fi % FACES_PER_YIELD == FACES_PER_YIELD - 1 then co_yield(false) end
+			end
+			local meshObj = BUILDER:Build()
 
 			local meshes = mim_leaves[0].meshes
 			if meshes[texture] ~= nil then
@@ -214,6 +228,10 @@ local function generate_map_meshes()
 				table.Add(origObj._lightMeshes, meshObj._lightMeshes)
 			else
 				meshes[texture] = meshObj
+			end
+
+			for _, face in ipairs(tfaces) do
+				face:ClearMeshData()
 			end
 
 			--co_yield(false)
@@ -251,11 +269,8 @@ function mdlface_meta:GenerateLightColors(verts, hdr)
 				local vert = verts[i]
 				local r, g, b = 255, 255, 255
 
-				--[[local light = MAP:FindNearestLight(vert.pos, hdr)
-				if co_isyieldable then co_yield(false) end
-				if light then
-					r, g, b = light:GetColor():Unpack()
-				end--]]
+				--local realPos = vert.pos * SCALE_FACTOR
+				--r, g, b = MAP:CalculateAmbientColor(realPos, hdr):Unpack()
 
 				colors[i] = { r = r, g = g, b = b }
 			end
@@ -337,11 +352,9 @@ local function bake_static_props()
 		local leaf = mim_leaves[li]
 
 		for _, mesh in ipairs(meshes) do
-			local builder = NikNaks.MeshBuilder()
-
 			local texture = mesh._mesh.material
-			builder:AddFace(mesh, { material = Material(texture), light = true })
-			local meshObj = builder:Build()
+			BUILDER:AddFace(mesh, { material = Material(texture), light = true })
+			local meshObj = BUILDER:Build()
 
 			local lm = leaf.meshes
 			if lm[texture] ~= nil then
@@ -360,7 +373,77 @@ local function bake_static_props()
 	--co_yield(false, "baked " .. table.Count(props) .. " static props")
 end
 
-local leaves_pvs = {}
+local BuildVisibility, CanGroupSeeGroup, GetGroupFromPos, AddGroup
+local leaf_groups
+do
+	local groups = {}
+	local leafToGroup = {}
+
+	AddGroup = function(leafs)
+		local group = { leafs = leafs, canSee = {} }
+		groups[#groups + 1] = group
+		for _, leaf in ipairs(leafs) do
+			leafToGroup[leaf] = group
+		end
+	end
+
+	GetGroupFromPos = function(position)
+		local leaf = MAP:PointInLeaf(0, position)
+		return leafToGroup[leaf]
+	end
+
+	CanGroupSeeGroup = function(groupA, groupB)
+		return groupA.canSee[groupB] or false
+	end
+
+	-- Merge the PVS of each leaf into a single one
+	---@param group PVSGroup
+	---@return PVSObject
+	local function buildGroupPVS(group)
+		local pvs = MAP:CreatePVS()
+		local seen = {}
+
+		for _, leaf in ipairs(group.leafs) do
+			local cluster = leaf:GetCluster()
+			if cluster >= 0 and not seen[cluster] then
+				seen[cluster] = true
+				for id in pairs(leaf:CreatePVS()) do
+					if id ~= "__map" then pvs[id] = true end -- Yee kinda hate that I didn't use a proper field for indexing
+				end
+			end
+		end
+		return pvs
+	end
+
+	BuildVisibility = function()
+		for i = 1, #groups do
+			groups[i].canSee = {}
+		end
+
+		for i = 1, #groups do
+			local group1 = groups[i]
+			local pvs = buildGroupPVS(group1)
+
+			for j = i, #groups do
+				local group2 = groups[j]
+
+				local canSee = false
+				for _, leaf in ipairs(group2.leafs) do
+					if pvs[leaf:GetCluster()] then
+						canSee = true
+						break
+					end
+				end
+
+				group1.canSee[group2] = canSee
+				group2.canSee[group1] = canSee
+			end
+		end
+	end
+	leaf_groups = groups
+end
+
+--[[local leaves_pvs = {}
 local function calculate_visibility()
 	for i = 0, NUM_CLUSTERS do
 		local pvsLeaves = {}
@@ -414,7 +497,7 @@ local function calculate_visibility()
 		end
 		--co_yield(false, "calculating visibility by cluster - pass: " .. pass)
 	end
-end
+end--]]
 
 local threads = {}
 local THREAD_THRESHOLD = 0.01
@@ -449,7 +532,7 @@ table.insert(threads, coroutine.create(function()
 	generate_map_meshes()
 	bake_static_props()
 
-	if SKYBOX_POS then
+	--[[if SKYBOX_POS then
 		local startleaf = MAP:PointInLeaf(0, SKYBOX_POS * SCALE_FACTOR)
 		for _, leaf in next, MAP_LEAVES do
 			if leaf.cluster ~= startleaf.cluster then continue end
@@ -468,7 +551,37 @@ table.insert(threads, coroutine.create(function()
 		end
 	end
 
-	calculate_visibility()
+	calculate_visibility()--]]
+
+	do
+		for i = 0, NUM_CLUSTERS do
+			local leafs = {}
+			for li in next, mim_leaves do
+				if skybox_leaves[li] then continue end
+
+				local leaf = MAP_LEAVES[li]
+				if leaf.cluster ~= i then continue end
+
+				leafs[#leafs + 1] = leaf
+			end
+			AddGroup(leafs)
+		end
+	end
+	BuildVisibility()
+
+	if SKYBOX_POS then
+		local skyGroup = GetGroupFromPos(SKYBOX_POS)
+		for _, leaf in ipairs(skyGroup.leafs) do
+			skybox_leaves[leaf.__id] = true
+		end
+		for group, can in next, skyGroup.canSee do
+			if can == false then continue end
+
+			for _, leaf in ipairs(group.leafs) do
+				skybox_leaves[leaf.__id] = true
+			end
+		end
+	end
 
 	DONE_LOADING = true
 
@@ -674,9 +787,27 @@ hook.Add("PostDrawOpaqueRenderables", TAG, function(depth, skybox, skybox3d)
 	local hasPvs = cluster > -1
 	local pvsLeaves = {}
 
-	if leaves_pvs[cluster] then
-		pvsLeaves = leaves_pvs[cluster]
+	if hasPvs then
+		local group = GetGroupFromPos(pos)
+		if group then
+			for _, leaf in ipairs(group.leafs) do
+				pvsLeaves[leaf.__id] = true
+			end
+			for groupB, can in next, group.canSee do
+				if can == false then continue end
+
+				for _, leaf in ipairs(groupB.leafs) do
+					pvsLeaves[leaf.__id] = true
+				end
+			end
+		else
+			hasPvs = false
+		end
 	end
+
+	--[[if leaves_pvs[cluster] then
+		pvsLeaves = leaves_pvs[cluster]
+	end--]]
 	if next(pvsLeaves) == nil then
 		hasPvs = false
 	end
@@ -744,9 +875,23 @@ hook.Add("PreDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d)
 	local hasPvs = cluster > -1
 	local pvsLeaves = {}
 
-	if leaves_pvs[cluster] then
-		pvsLeaves = leaves_pvs[cluster]
+	if hasPvs then
+		local group = GetGroupFromPos(pos)
+		for _, leaf in ipairs(group.leafs) do
+			pvsLeaves[leaf.__id] = true
+		end
+		for groupB, can in next, group.canSee do
+			if can == false then continue end
+
+			for _, leaf in ipairs(groupB.leafs) do
+				pvsLeaves[leaf.__id] = true
+			end
+		end
 	end
+
+	--[[if leaves_pvs[cluster] then
+		pvsLeaves = leaves_pvs[cluster]
+	end--]]
 	if next(pvsLeaves) == nil then
 		hasPvs = false
 	end

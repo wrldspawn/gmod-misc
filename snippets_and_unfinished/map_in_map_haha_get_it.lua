@@ -525,7 +525,7 @@ local function fix_materials()
 						trans_var = "$additive"
 					end
 				end
-				local flags = kv["$flags"]
+				local flags = kv["$flags"] or 0
 				if bit.band(flags, bit.bor(bit.lshift(1, 7), bit.lshift(1, 21))) ~= 0 then -- MATERIAL_VAR_ADDITIVE_BIT, MATERIAL_VAR_TRANSLUCENT_BIT
 					trans_var = bit.band(flags, bit.lshift(1, 7)) ~= 0 and "$additive" or "$translucent"
 					target = mim_mat_cache_trans

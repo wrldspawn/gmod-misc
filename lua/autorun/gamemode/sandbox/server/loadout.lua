@@ -28,3 +28,4 @@ hook.Add("PlayerLoadout", "OverrideLoadout", function(ply)
 
     return true
 end)
+

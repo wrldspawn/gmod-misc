@@ -36,7 +36,7 @@ local function GetPlayers()
 				lowest = score
 			end
 
-			plys[#plys + 1] = { name = ply:Name(), score = score, time = time }
+			plys[#plys + 1] = { name = ply:Nick(), score = score, time = time }
 		else
 			score = lowest - i
 
