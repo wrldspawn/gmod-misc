@@ -1,12 +1,10 @@
-local overrides = {}
+local hooks = hook.GetTable()
 
-local ownInfo = debug.getinfo(1, "S")
+local fixPostDrawViewModel
+if CLIENT then
+	local ownInfo = debug.getinfo(1, "S")
 
-local SysTime = SysTime
-local print = print
-
-overrides[#overrides + 1] = function()
-	if CLIENT then
+	fixPostDrawViewModel = function()
 		local hook = hook
 		local player_manager = player_manager
 		local render = render
@@ -73,9 +71,57 @@ overrides[#overrides + 1] = function()
 	end
 end
 
+-- until https://github.com/Xerasin/Sit-Anywhere/pull/58 is merged
+local SIT_TAG = "SitAnyG_"
+local function fixSitAnywhere()
+	hook.Add("SetupMove", SIT_TAG .. "SetupMove", function(ply, mv)
+		if not ply:GetNWBool(SIT_TAG) then
+			return
+		end
+
+		local butts = mv:GetButtons()
+		local getUp = bit.band(butts, IN_JUMP) == IN_JUMP or ply:GetMoveType() ~= MOVETYPE_WALK or ply:InVehicle() or
+				not ply:Alive()
+
+		if getUp then
+			ply:SetNWBool(SIT_TAG, false)
+		end
+
+		local move = bit.band(butts, IN_DUCK) == IN_DUCK
+
+		butts = bit.bxor(bit.bor(butts, bit.bor(IN_JUMP, IN_DUCK)), IN_JUMP)
+
+		if move then
+			butts = bit.bxor(bit.bor(bit.bor(butts, IN_WALK), IN_SPEED), IN_SPEED)
+
+			mv:SetButtons(butts)
+			return
+		end
+
+		mv:SetButtons(butts)
+		mv:SetSideSpeed(0)
+		mv:SetForwardSpeed(0)
+		mv:SetUpSpeed(0)
+	end)
+
+	hook.Add("CalcMainActivity", SIT_TAG .. "CalcMainActivity", function(ply, vel)
+		if ply:GetNWBool(SIT_TAG) and vel:Length2DSqr() < 1 then
+			local seq = ply:LookupSequence("pose_ducking_02")
+
+			if seq then
+				return ACT_MP_SWIM, seq
+			end
+		end
+	end)
+end
+
 local function do_overrides()
-	for _, override in ipairs(overrides) do
-		override()
+	if hooks.CalcMainActivity[SIT_TAG .. "CalcMainActivity"] then
+		fixSitAnywhere()
+	end
+
+	if CLIENT then
+		fixPostDrawViewModel()
 	end
 end
 
