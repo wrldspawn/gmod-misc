@@ -145,12 +145,6 @@ hook.Add("PlayerBindPress", Tag2, function(ply, bind, pressed)
     end
 end)
 
-hook.Add("HUDShouldDraw", Tag2, function(elem)
-    if (zooming or ((perspective_enabled or thirdperson_mode ~= 0) and LocalPlayer():KeyDown(IN_WALK))) and elem == "_chud_weaponswitcher" then
-        return false
-    end
-end)
-
 local alpha = 0
 hook.Add("HUDPaint", Tag2, function()
     local x, y = ScrW() / 2, ScrH() * 0.75

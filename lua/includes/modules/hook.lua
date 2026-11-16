@@ -1,8 +1,9 @@
 -- https://github.com/Srlion/Hook-Library
 -- removed ulib stuff because it could cause autorefresh issues, just define GetULibTable and it should be fine
--- and just more micro-op because why not
-
-local next = next
+local gmod = gmod
+local math = math
+local table = table
+local pairs = pairs
 local setmetatable = setmetatable
 local isstring = isstring
 local isnumber = isnumber
@@ -14,17 +15,7 @@ local print = print
 local GProtectedCall = ProtectedCall
 local tostring = tostring
 local error = error
-local rawset = rawset
-
-local gmod_GetGamemode = gmod.GetGamemode
-local math_floor = math.floor
-local math_min = math.min
-local math_max = math.max
-local table_sort = table.sort
-
-local function math_Clamp(num, low, high)
-	return math_min(math_max(num, low), high)
-end
+local rawget = rawget
 
 local EMPTY_FUNC = function() end
 
@@ -66,8 +57,8 @@ local EVENTS_LISTS = {
 	[POST_HOOK_RETURN] = 2,
 	[POST_HOOK] = 3,
 }
-for pri in next, NORMAL_PRIORITIES_ORDER do
-	EVENTS_LISTS[pri] = 1
+for k, v in pairs(NORMAL_PRIORITIES_ORDER) do
+	EVENTS_LISTS[k] = 1
 end
 
 local MAIN_PRIORITIES = {
@@ -122,7 +113,7 @@ local function CopyPriorityList(self, priority)
 		local j = 0
 		for i = 1, old_list[ 0 --[[length]] ] do
 			local node = old_list[i]
-			if not node.removed then -- don't copy removed hooks
+			if not rawget(node, "removed") then -- don't copy removed hooks
 				j = j + 1
 				local new_node = {
 					[ 0 --[[func]] ] = node[ 0 --[[func]] ],
@@ -147,17 +138,20 @@ local function CopyPriorityList(self, priority)
 	self[list_index] = new_list
 end
 
-local function GetPriorityList(self, priority)
-	return self[EVENTS_LISTS[priority]]
-end
-
 local function new_event(name)
 	if not events[name] then
+		local function GetPriorityList(self, priority)
+			return self[EVENTS_LISTS[priority]]
+		end
+
 		-- [0] = list length
 		local lists = {
 			[1] = { [0] = 0 }, -- normal hooks
 			[2] = { [0] = 0 }, -- post return hooks
 			[3] = { [0] = 0 }, -- post hooks
+
+			CopyPriorityList = CopyPriorityList,
+			GetPriorityList = GetPriorityList,
 		}
 
 		-- create the event table, we use [0] as hook names can't be numbers
@@ -166,21 +160,9 @@ local function new_event(name)
 	return events[name]
 end
 
-local hook_table = {}
-local function hook_table_meta(event_name, hooks)
-	return setmetatable(hooks, {
-		__newindex = function(self, key, value)
-			if value == nil then
-				_M.Remove(event_name, key)
-			elseif isfunction(value) then
-				_M.Add(event_name, key, value)
-			end
-		end
-	})
-end
-
 function GetTable()
-	for event_name, event in next, events do
+	local new_table = {}
+	for event_name, event in pairs(events) do
 		local hooks = {}
 		for i = 1, 3 do
 			local list = event[0][i]
@@ -189,10 +171,9 @@ function GetTable()
 				hooks[node.name] = event[node.name].real_func
 			end
 		end
-
-		hook_table[event_name] = hook_table_meta(event_name, hooks)
+		new_table[event_name] = hooks
 	end
-	return hook_table
+	return new_table
 end
 
 function Remove(event_name, name)
@@ -210,19 +191,16 @@ function Remove(event_name, name)
 	local event = events[event_name]
 	if not event then return end -- no event with that name
 
-	local tbl = event[name]
-	if not tbl then return end -- no hook with that name
+	local hook_table = event[name]
+	if not hook_table then return end -- no hook with that name
 
-	tbl.node.removed = true
+	hook_table.node.removed = true
 
 	-- we need to overwrite the priority list with the new one, to make sure we don't mess up with ongoing iterations inside hook.Call/ProtectedCall
 	-- we basically copy the list without the removed hook
-	CopyPriorityList(event[ 0 --[[lists]] ], tbl.priority)
+	event[ 0 --[[lists]] ]:CopyPriorityList(hook_table.priority)
 
 	event[name] = nil -- remove the hook from the event table
-	if hook_table[event_name] then
-		rawset(hook_table[event_name], name, nil)
-	end
 end
 
 function Add(event_name, name, func, priority)
@@ -253,7 +231,7 @@ function Add(event_name, name, func, priority)
 	end
 
 	if isnumber(priority) then
-		priority = math_floor(priority)
+		priority = math.floor(priority)
 		if priority < -2 then priority = -2 end
 		if priority > 2 then priority = 2 end
 		if priority == -2 or priority == 2 then -- ulx doesn't allow returning anything in monitor hooks
@@ -295,11 +273,11 @@ function Add(event_name, name, func, priority)
 			Remove(event_name, name)
 		else
 			-- create a new hook list to use, we need to shadow the old one
-			CopyPriorityList(event[0], priority)
+			event[0]:CopyPriorityList(priority)
 		end
 	end
 
-	local hook_list = GetPriorityList(event[0], priority)
+	local hook_list = event[0]:GetPriorityList(priority)
 
 	local hk_n = hook_list[ 0 --[[length]] ] + 1
 	local node = {
@@ -320,13 +298,8 @@ function Add(event_name, name, func, priority)
 		node = node,
 	}
 
-	if not hook_table[event_name] then
-		hook_table[event_name] = hook_table_meta(event_name, {})
-	end
-	rawset(hook_table[event_name], name, real_func)
-
 	if NORMAL_PRIORITIES_ORDER[priority] then
-		table_sort(hook_list, function(a, b)
+		table.sort(hook_list, function(a, b)
 			local a_order = NORMAL_PRIORITIES_ORDER[a.priority]
 			local b_order = NORMAL_PRIORITIES_ORDER[b.priority]
 			if a_order == b_order then
@@ -340,14 +313,14 @@ end
 local gamemode_cache
 function Run(name, ...)
 	if not gamemode_cache then
-		gamemode_cache = gmod_GetGamemode and gmod_GetGamemode() or nil
+		gamemode_cache = gmod and gmod.GetGamemode() or nil
 	end
 	return Call(name, gamemode_cache, ...)
 end
 
 function ProtectedRun(name, ...)
 	if not gamemode_cache then
-		gamemode_cache = gmod_GetGamemode and gmod_GetGamemode() or nil
+		gamemode_cache = gmod and gmod.GetGamemode() or nil
 	end
 	return ProtectedCall(name, gamemode_cache, ...)
 end
@@ -371,7 +344,8 @@ function Call(event_name, gm, ...)
 			local node = normal_hooks[i]
 			local n_a, n_b, n_c, n_d, n_e, n_f = node[ 0 --[[func]] ](...)
 			if n_a ~= nil then
-				hook_name, a, b, c, d, e, f = node.name, n_a, n_b, n_c, n_d, n_e, n_f
+				hook_name = node.name
+				a = n_a; b = n_b; c = n_c; d = n_d; e = n_e; f = n_f
 				break
 			end
 		end
@@ -380,35 +354,32 @@ function Call(event_name, gm, ...)
 	if not hook_name and gm then
 		local gm_func = gm[event_name]
 		if gm_func then
-			hook_name, a, b, c, d, e, f = gm, gm_func(gm, ...)
+			hook_name = gm
+			a, b, c, d, e, f = gm_func(gm, ...)
 		end
 	end
 
-	-- we need to check if there is any post(return) hooks, if not then we can return early
-	if lists[2][ 0 --[[length]] ] == 0 and lists[3][ 0 --[[length]] ] == 0 then
-		return a, b, c, d, e, f
-	end
-
-	local returned_values = { hook_name, a, b, c, d, e, f }
-
-	do -- post return hooks
+	do -- post(return) hooks, skipped entirely when there are none
 		local post_return_hooks = lists[2]
-		for i = 1, post_return_hooks[ 0 --[[length]] ] do
-			local node = post_return_hooks[i]
-			local n_a, n_b, n_c, n_d, n_e, n_f = node[ 0 --[[func]] ](returned_values, ...)
-			if n_a ~= nil then
-				a, b, c, d, e, f = n_a, n_b, n_c, n_d, n_e, n_f
-				returned_values = { node.name, a, b, c, d, e, f }
-				break
-			end
-		end
-	end
+		local n = post_return_hooks[ 0 --[[length]] ]
+		if n ~= 0 or lists[3][ 0 --[[length]] ] ~= 0 then
+			local returned_values = { hook_name, a, b, c, d, e, f }
 
-	do -- post hooks
-		local post_hooks = lists[3]
-		for i = 1, post_hooks[ 0 --[[length]] ] do
-			local node = post_hooks[i]
-			node[ 0 --[[func]] ](returned_values, ...)
+			for i = 1, n do
+				local node = post_return_hooks[i]
+				local n_a, n_b, n_c, n_d, n_e, n_f = node[ 0 --[[func]] ](returned_values, ...)
+				if n_a ~= nil then
+					a = n_a; b = n_b; c = n_c; d = n_d; e = n_e; f = n_f
+					returned_values = { node.name, a, b, c, d, e, f }
+					break
+				end
+			end
+
+			local post_hooks = lists[3]
+			for i = 1, post_hooks[ 0 --[[length]] ] do
+				local node = post_hooks[i]
+				node[ 0 --[[func]] ](returned_values, ...)
+			end
 		end
 	end
 
@@ -491,7 +462,7 @@ end
 function GetULibTable()
 	local new_events = {}
 
-	for event_name, event in next, events do
+	for event_name, event in pairs(events) do
 		local hooks = { [-2] = {}, [-1] = {}, [0] = {}, [1] = {}, [2] = {} }
 		for i = 1, 3 do
 			local list = event[0][i]
@@ -499,7 +470,7 @@ function GetULibTable()
 				local node = list[j]
 				local priority = node.priority
 				priority = isnumber(priority) and priority or priority[1]
-				priority = math_Clamp(priority, -2, 2) -- just to make sure it's in the range
+				priority = math.Clamp(priority, -2, 2) -- just to make sure it's in the range
 				local hook_table = event[node.name]
 				hooks[priority][node.name] = hook_table.real_func
 			end
