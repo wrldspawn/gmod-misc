@@ -10,9 +10,7 @@ local Color = Color
 local EyePos = EyePos
 local EyeAngles = EyeAngles
 local Format = Format
-local IsValid = IsValid
 local LocalPlayer = LocalPlayer
-local LocalToWorld = LocalToWorld
 local Vector = Vector
 local TEXFILTER_POINT = TEXFILTER.POINT
 
@@ -24,7 +22,6 @@ local render_PopFilterMag = render.PopFilterMag
 local render_PopFilterMin = render.PopFilterMin
 local string_Explode = string.Explode
 local surface_SetDrawColor = surface.SetDrawColor
-local surface_DrawLine = surface.DrawLine
 local surface_SetMaterial = surface.SetMaterial
 local surface_DrawTexturedRect = surface.DrawTexturedRect
 local table_sort = table.sort
@@ -37,7 +34,7 @@ local Angle_RotateAroundAxis = ANGLE.RotateAroundAxis
 local Angle_Unpack = ANGLE.Unpack
 
 local VECTOR = FindMetaTable("Vector")
-local Vector_Distance = VECTOR.Distance
+local Vector_DistToSqr = VECTOR.DistToSqr
 local Vector_ToScreen = VECTOR.ToScreen
 local Vector_Unpack = VECTOR.Unpack
 
@@ -47,6 +44,9 @@ local VEC_ZERO = Vector()
 local VEC_FORWARD = Vector(BOUNDS, 0, 0)
 local VEC_LEFT = Vector(0, BOUNDS, 0)
 local VEC_UP = Vector(0, 0, BOUNDS)
+local VEC_FALLBACK_MINS = Vector(-BOUNDS, -BOUNDS, -BOUNDS)
+local VEC_FALLBACK_MAXS = VEC_FALLBACK_MINS * -1
+local MAT_MESH = Material("color_ignorez")
 
 if picker3_axis_mesh and picker3_axis_mesh:IsValid() then
 	picker3_axis_mesh:Destroy()
@@ -108,6 +108,7 @@ local function CreateIcon(class, path)
 	return CreateMaterial("picker3_icon-" .. class, "UnlitGeneric", {
 		["$basetexture"] = path,
 		["$vertexalpha"] = 1,
+		["$vertexcolor"] = 1,
 	})
 end
 
@@ -164,7 +165,6 @@ local ENT_ICONS = {
 	env_speaker = ICON_SOUND,
 	env_splash = ICON_WATER,
 	env_steam = ICON_CLOUDS,
-	env_sun = Material("icon16/weather_sun.png"),
 	func_areaportal = Material("icon16/shading.png"),
 	func_areaportalwindow = Material("icon16/shading.png"),
 	func_ladderendpoint = ICON_TARGET,
@@ -181,7 +181,7 @@ local ENT_ICONS = {
 	info_waypoint = Material("icon16/exclamation.png"),
 	infodecal = ICON_MATERIAL,
 	keyframe_rope = ICON_VECTOR,
-	light_environment = Material("icon16/weather_cloudy.png"),
+	light_environment = CreateIcon("light_environment", "editor/light_env"),
 	light_spot = ICON_LIGHT,
 	logic_choreographed_scene = ICON_CHOREO,
 	logic_merchant_relay = Material("icon16/cart.png"),
@@ -295,6 +295,12 @@ for _, class in ipairs(NODE_CLASSES) do
 	ENT_ICONS[class] = ICON_NODE
 end
 
+local COLORABLE_CLASSES = {
+	light_environment = true,
+	env_sun = true,
+	light = true,
+}
+
 local function getupvalues(f)
 	local i, t = 0, {}
 
@@ -395,6 +401,40 @@ local IGNORE = {
 	point_push = true,
 }
 
+local KNOWN_KVS = {
+	classname = true,
+	targetname = true,
+	filtername = true,
+	filterclass = true,
+	filterteam = true,
+	origin = true,
+	angles = true,
+	model = true,
+	texture = true,
+	image = true,
+	color = true,
+	Color = true,
+	rendercolor = true,
+	_light = true,
+	text = true,
+	message = true,
+	target = true,
+	landmark = true,
+	attach1 = true,
+	entitytemplate = true,
+	startvalue = true,
+	InitialValue = true,
+	max = true,
+	min = true,
+	CompareValue = true,
+	startdisabled = true,
+	StartDisabled = true,
+	OutValue = true,
+	mins = true,
+	maxs = true,
+	hammerId = true, -- duplicated mapCreationId
+}
+
 local missingIcons = {}
 local function GetMapEnts()
 	if NikNaks then
@@ -422,7 +462,7 @@ local function GetMapEnts()
 				angle = ent.angles,
 				model = ent.model,
 				texture = ent.texture or ent.image,
-				color = ent.color or ent._light,
+				color = ent.color or ent.Color or ent.rendercolor or ent._light,
 				text = ent.text or ent.message,
 				target = ent.target or ent.landmark or ent.attach1 or ent.entitytemplate,
 				startvalue = ent.startvalue or ent.InitialValue,
@@ -431,6 +471,7 @@ local function GetMapEnts()
 				compvalue = ent.CompareValue,
 				disabled = tobool(ent.startdisabled ~= nil and ent.startdisabled or ent.StartDisabled),
 				outputs = {},
+				kvs = {},
 			}
 
 			if ent.model then
@@ -467,9 +508,16 @@ local function GetMapEnts()
 				end
 			end
 
+			if info.color then
+				info.color = tostring(info.color)
+				local r, g, b = unpack(string_Explode(" ", info.color))
+				local col = Color(tonumber(r) or 255, tonumber(g) or 255, tonumber(b) or 255, 255)
+				info._drawcolor = col
+			end
+
 			if not info.mins and not info.maxs then
-				info.mins = Vector(-BOUNDS, -BOUNDS, -BOUNDS)
-				info.maxs = Vector(BOUNDS, BOUNDS, BOUNDS)
+				info.mins = VEC_FALLBACK_MINS
+				info.maxs = VEC_FALLBACK_MAXS
 				info.bounds_fallback = true
 			end
 
@@ -484,7 +532,12 @@ local function GetMapEnts()
 			end
 
 			for k, v in next, ent do
-				if not string.match(k, "^On") and k ~= "OutValue" then continue end
+				if not string.match(k, "^On") and k ~= "OutValue" then
+					if not KNOWN_KVS[k] then
+						info.kvs[k] = tostring(v)
+					end
+					continue
+				end
 				info.outputs[k] = v
 			end
 
@@ -501,7 +554,7 @@ local function GetMapEnts()
 			local info = {
 				class = "prop_static",
 				origin = prop.Origin,
-				angle = prop.Angle,
+				angle = prop.Angles,
 				model = prop.PropType,
 			}
 
@@ -510,8 +563,9 @@ local function GetMapEnts()
 				info.mins = mdl.HullMin
 				info.maxs = mdl.HullMax
 			else
-				info.mins = Vector(-BOUNDS, -BOUNDS, -BOUNDS)
-				info.maxs = Vector(BOUNDS, BOUNDS, BOUNDS)
+				info.mins = VEC_FALLBACK_MINS
+				info.maxs = VEC_FALLBACK_MAXS
+				info.bounds_fallback = true
 			end
 
 			table.insert(MAP_ENTS, info)
@@ -520,7 +574,7 @@ local function GetMapEnts()
 end
 
 local function CollectEntity(ent)
-	if not IsValid(ent) then return end
+	if not (ent ~= nil and ent:IsValid()) then return end
 	if NikNaks and ent:CreatedByMap() then
 		local model = ent:GetModel()
 		for _, info in ipairs(MAP_ENTS) do
@@ -569,41 +623,59 @@ local function sortdist(a, b)
 	return a.distance < b.distance
 end
 
+local MAX_DIST = 32768
+local MAX_DIST_SQR = MAX_DIST * MAX_DIST
+
 local lply = LocalPlayer()
 local MATRIX = Matrix()
+local textPos = Vector()
+
+local drawself = false
+local eyepos = EyePos()
+local eyeang = EyeAngles()
+local forward = Angle_Forward(eyeang) * MAX_DIST
+local myPos = Vector()
+
+hook.Add("PlayerPostThink", TAG, function(ply)
+	eyepos = EyePos()
+	eyeang = EyeAngles()
+
+	forward = Angle_Forward(eyeang) * MAX_DIST
+
+	myPos = ply:GetPos()
+	drawself = ply:ShouldDrawLocalPlayer()
+end)
 
 hook.Add("HUDPaint", TAG, function()
 	if PICKER_ENABLED then
+		if not lply:IsValid() then
+			lply = LocalPlayer()
+		end
+		if not lply:IsValid() then return end
+
 		local to_process = {}
 		local axes = {}
 		local has_hit = false
 
-		if not IsValid(lply) then
-			lply = LocalPlayer()
-		end
-
-		local eyepos = EyePos()
-		local eyeang = EyeAngles()
-		local forward = Angle_Forward(eyeang) * 32768
-
 		for _, ent in ipairs(MAP_ENTS) do
 			local entity = ent.entity
-			local isvalid = IsValid(entity)
+			local isvalid = entity ~= nil and entity:IsValid()
 			local pos = isvalid and entity:GetPos() or ent.origin
 			local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
 
-			local dist = Vector_Distance(eyepos, pos)
-			if dist > 32768 then continue end
-			ent.distance = dist
-
-			if isvalid then
-				if entity:IsWeapon() and entity:GetOwner() == lply then continue end
-			end
+			local dist = Vector_DistToSqr(eyepos, pos)
+			if dist > MAX_DIST_SQR then continue end
 
 			local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
 
 			local scrpos = Vector_ToScreen(pos)
 			if hitpos == nil and not scrpos.visible then continue end
+
+			ent.distance = dist
+
+			if isvalid then
+				if entity:IsWeapon() and entity:GetOwner() == lply then continue end
+			end
 
 			local axis = {
 				pos = pos,
@@ -621,34 +693,19 @@ hook.Add("HUDPaint", TAG, function()
 		end
 
 		for ent in next, ENTITIES do
-			if not IsValid(ent) then continue end
+			if not ent:IsValid() then continue end
 
 			local pos = ent:GetPos()
-			local myPos = lply:GetPos()
-			local dist = Vector_Distance(pos, eyepos)
-
-			if dist > 32768 then continue end
-
-			if (
-						ent == lply or
-						ent:GetParent() == lply or
-						(ent:IsWeapon() and ent:GetOwner() == lply) or
-						ent == lply:GetViewModel() or
-						pos == myPos or
-						dist < 16 or
-						ent == lply:GetVehicle() or
-						ent == lply:GetHands()
-					) and not lply:ShouldDrawLocalPlayer() then
-				continue
-			end
-
 			local ang = ent:GetAngles()
+
+			local dist = Vector_DistToSqr(pos, eyepos)
+			if dist > MAX_DIST_SQR then continue end
 
 			local bounds_fallback
 			local mins, maxs = ent:GetCollisionBounds()
 			if mins == VEC_ZERO and maxs == VEC_ZERO then
-				mins = Vector(-BOUNDS, -BOUNDS, -BOUNDS)
-				maxs = Vector(BOUNDS, BOUNDS, BOUNDS)
+				mins = VEC_FALLBACK_MINS
+				maxs = VEC_FALLBACK_MAXS
 				bounds_fallback = true
 			end
 
@@ -656,6 +713,19 @@ hook.Add("HUDPaint", TAG, function()
 
 			local scrpos = Vector_ToScreen(pos)
 			if hitpos == nil and not scrpos.visible then continue end
+
+			if (
+						ent == lply or
+						ent:GetParent() == lply or
+						(ent:IsWeapon() and ent:GetOwner() == lply) or
+						ent == lply:GetViewModel() or
+						pos == myPos or
+						dist < 256 or -- 16^2
+						(lply:InVehicle() and ent == lply:GetVehicle()) or
+						ent == lply:GetHands()
+					) and not drawself then
+				continue
+			end
 
 			local axis = {
 				pos = pos,
@@ -672,7 +742,7 @@ hook.Add("HUDPaint", TAG, function()
 					mins = mins,
 					maxs = maxs,
 					model = ent:GetModel(),
-					distance = Vector_Distance(eyepos, pos),
+					distance = Vector_DistToSqr(eyepos, pos),
 					outputs = {},
 					bounds_fallback = bounds_fallback,
 				}
@@ -685,172 +755,154 @@ hook.Add("HUDPaint", TAG, function()
 			axes[#axes + 1] = axis
 		end
 
-		if false then
+		if #axes > 0 then
+			render.SetMaterial(MAT_MESH)
+			cam.Start3D()
 			for _, axis in ipairs(axes) do
-				local pos = axis.pos
-				local ang = axis.ang
+				local scrpos = Vector_ToScreen(axis.pos)
+				if not scrpos.visible then continue end
 
-				local spos = Vector_ToScreen(pos)
-				if not spos.visible then continue end
+				local obj = has_hit and (axis.hit and picker3_axis_mesh or picker3_axis_inactive_mesh) or picker3_axis_mesh
 
-				local alpha = axis.hit and 255 or 72
-				if #to_process == 0 then
-					alpha = 255
+				MATRIX:Identity()
+				MATRIX:Translate(axis.pos)
+				MATRIX:Rotate(axis.ang)
+
+				cam.PushModelMatrix(MATRIX)
+				if obj and obj:IsValid() then
+					obj:Draw()
+				end
+				cam.PopModelMatrix()
+			end
+			cam.End3D()
+		end
+
+		if #to_process > 0 then
+			table_sort(to_process, sortdist)
+
+			for _, ent in ipairs(to_process) do
+				local entity = ent.entity
+				local isvalid = entity ~= nil and entity:IsValid()
+				local pos = isvalid and entity:GetPos() or ent.origin
+				local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
+
+				textPos:Set(pos)
+				if pos == VEC_ZERO and ent.mins and ent.maxs then
+					textPos:Set(ent.mins)
+					textPos:Add(ent.maxs)
+					textPos:Div(2)
 				end
 
-				local pos_forward = LocalToWorld(VEC_FORWARD, ANGLE_ZERO, pos, ang)
-				local pos_left = LocalToWorld(VEC_LEFT, ANGLE_ZERO, pos, ang)
-				local pos_up = LocalToWorld(VEC_UP, ANGLE_ZERO, pos, ang)
+				local center = Vector_ToScreen(textPos)
 
-				local spos_f = Vector_ToScreen(pos_forward)
-				local spos_l = Vector_ToScreen(pos_left)
-				local spos_u = Vector_ToScreen(pos_up)
+				local lines = {}
+				picktext.AddLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
+				if ent.disabled then
+					picktext.AddLine(lines, "Starts Disabled", "", COLOR_INVALID, COLOR_INVALID)
+				end
 
-				surface_SetDrawColor(255, 0, 0, alpha)
-				surface_DrawLine(spos.x, spos.y, spos_f.x, spos_f.y)
-				surface_SetDrawColor(0, 255, 0, alpha)
-				surface_DrawLine(spos.x, spos.y, spos_l.x, spos_l.y)
-				surface_SetDrawColor(0, 0, 255, alpha)
-				surface_DrawLine(spos.x, spos.y, spos_u.x, spos_u.y)
-			end
-		end
+				picktext.AddLine(lines, ent.name, "Name: ", COLOR_NAME, COLOR_TEXT)
 
-		cam.Start3D()
-		for _, axis in ipairs(axes) do
-			local spos = Vector_ToScreen(axis.pos)
-			if not spos.visible then continue end
-
-			local obj = has_hit and (axis.hit and picker3_axis_mesh or picker3_axis_inactive_mesh) or picker3_axis_mesh
-
-			MATRIX:Identity()
-			MATRIX:Translate(axis.pos)
-			MATRIX:Rotate(axis.ang)
-
-			render.SetColorMaterial()
-			cam.PushModelMatrix(MATRIX)
-			if obj and obj:IsValid() then
-				obj:Draw()
-			end
-			cam.PopModelMatrix()
-		end
-		cam.End3D()
-
-		table_sort(to_process, sortdist)
-
-		for _, ent in ipairs(to_process) do
-			local entity = ent.entity
-			local isvalid = IsValid(entity)
-			local pos = isvalid and entity:GetPos() or ent.origin
-			local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
-
-			local textPos = Vector(pos)
-			if pos == VEC_ZERO and ent.mins and ent.maxs then
-				textPos:Set(ent.mins)
-				textPos:Add(ent.maxs)
-				textPos:Div(2)
-			end
-
-			local center = textPos:ToScreen()
-
-			local lines = {}
-			picktext.AddLine(lines, isvalid and " (_" .. entity:EntIndex() .. ")" or "", ent.class, COLOR_TEXT, COLOR_FIELD)
-			if ent.disabled then
-				picktext.AddLine(lines, "Starts Disabled", "", COLOR_INVALID, COLOR_INVALID)
-			end
-
-			picktext.AddLine(lines, ent.name, "Name: ", COLOR_NAME, COLOR_TEXT)
-
-			local is_filter = ent.class:find("^filter_")
-			if ent.filter and MAP and not is_filter then
-				local filter = filter_cache[ent.filter]
-				if filter == nil then
-					local filterent = MAP:FindByName(ent.filter)[1]
-					if filterent then
-						filter = ent.filter
-						local filterclass = filterent.classname
-						local badFilter = string.format("<bad filter: %s>", filter)
-						if filterclass == "filter_activator_class" then
-							filter = "By class: " .. (filterent.filterclass or badFilter)
-						elseif filterclass == "filter_activator_name" then
-							filter = "By name: " .. (filterent.filtername or badFilter)
-						elseif filterclass == "filter_activator_team" then
-							filter = "By team: " .. (filterent.filterteam and team.GetName(filterent.filterteam) or badFilter)
+				local is_filter = ent.class:find("^filter_")
+				if ent.filter and MAP and not is_filter then
+					local filter = filter_cache[ent.filter]
+					if filter == nil then
+						local filterent = MAP:FindByName(ent.filter)[1]
+						if filterent then
+							filter = ent.filter
+							local filterclass = filterent.classname
+							local badFilter = string.format("<bad filter: %s>", filter)
+							if filterclass == "filter_activator_class" then
+								filter = "By class: " .. (filterent.filterclass or badFilter)
+							elseif filterclass == "filter_activator_name" then
+								filter = "By name: " .. (filterent.filtername or badFilter)
+							elseif filterclass == "filter_activator_team" then
+								filter = "By team: " .. (filterent.filterteam and team.GetName(filterent.filterteam) or badFilter)
+							end
+							filter_cache[ent.filter] = filter
+						else
+							filter_cache[ent.filter] = false
+							filter = false
 						end
-						filter_cache[ent.filter] = filter
-					else
-						filter_cache[ent.filter] = false
-						filter = false
 					end
-				end
-				if filter == false then
-					picktext.AddLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_INVALID)
-				else
-					picktext.AddLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
-				end
-			elseif is_filter then
-				picktext.AddLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
-			end
-
-			picktext.AddLine(lines, ent.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
-			if ent.texture then
-				if decal_cache[ent.texture] == nil then
-					local path = "materials/" .. ent.texture
-					path = path:gsub("%.spr$", "")
-					if not ent.texture:find("%.vmt$") then
-						path = path .. ".vmt"
-					end
-					decal_cache[ent.texture] = file.Exists(path, "GAME")
-				end
-				picktext.AddLine(lines, ent.texture, "Texture: ", COLOR_FIELD,
-					decal_cache[ent.texture] and COLOR_TEXT or COLOR_INVALID)
-			end
-			if ent.color then
-				local col = Color(unpack(string_Explode(" ", ent.color)))
-				col.a = 255
-				picktext.AddLine(lines, ent.color, "Color: ", COLOR_FIELD, col)
-			end
-
-			local posStr = Format(FORMAT_3, Vector_Unpack(pos))
-			local posCol = COLOR_TEXT
-			if pos == VEC_ZERO and ent.mins and ent.maxs then
-				posCol = COLOR_INVALID
-			end
-			picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, posCol)
-
-			if ent.angle then
-				local angle = Format(FORMAT_3, Angle_Unpack(ang))
-				picktext.AddLine(lines, angle, "Angle: ", COLOR_FIELD, COLOR_TEXT)
-			end
-
-			if not ent.bounds_fallback then
-				local mins = Format(FORMAT_3, Vector_Unpack(ent.mins))
-				local maxs = Format(FORMAT_3, Vector_Unpack(ent.maxs))
-				picktext.AddLine(lines, maxs, "Maxs: ", COLOR_FIELD, COLOR_TEXT)
-				picktext.AddLine(lines, mins, "Mins: ", COLOR_FIELD, COLOR_TEXT)
-			end
-
-			picktext.AddLine(lines, ent.text, "Text: ", COLOR_FIELD, COLOR_TEXT)
-			picktext.AddLine(lines, ent.startvalue, "Starting Value: ", COLOR_FIELD, COLOR_TEXT)
-			picktext.AddLine(lines, ent.minvalue, "Min Value: ", COLOR_FIELD, COLOR_TEXT)
-			picktext.AddLine(lines, ent.maxvalue, "Max Value: ", COLOR_FIELD, COLOR_TEXT)
-			picktext.AddLine(lines, ent.compvalue, "Compare Value: ", COLOR_FIELD, COLOR_TEXT)
-
-			picktext.AddLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
-
-			if ent.outputs ~= nil then
-				for on, outputs in next, ent.outputs do
-					if isstring(outputs) then
-						picktext.AddLine(lines, outputs:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+					if filter == false then
+						picktext.AddLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_INVALID)
 					else
-						for _, output in ipairs(outputs) do
-							picktext.AddLine(lines, output:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						picktext.AddLine(lines, filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
+					end
+				elseif is_filter then
+					picktext.AddLine(lines, ent.filter, "Filter: ", COLOR_FILTER, COLOR_TEXT)
+				end
+
+				picktext.AddLine(lines, ent.model, "Model: ", COLOR_FIELD, COLOR_TEXT)
+				if ent.texture then
+					if decal_cache[ent.texture] == nil then
+						local path = "materials/" .. ent.texture
+						path = path:gsub("%.spr$", "")
+						if not ent.texture:find("%.vmt$") then
+							path = path .. ".vmt"
+						end
+						decal_cache[ent.texture] = file.Exists(path, "GAME")
+					end
+					picktext.AddLine(lines, ent.texture, "Texture: ", COLOR_FIELD,
+						decal_cache[ent.texture] and COLOR_TEXT or COLOR_INVALID)
+				end
+				if ent.color then
+					picktext.AddLine(lines, ent.color, "Color: ", COLOR_FIELD, ent._drawcolor)
+				end
+
+				local posStr = Format(FORMAT_3, Vector_Unpack(pos))
+				local posCol = COLOR_TEXT
+				if pos == VEC_ZERO and ent.mins and ent.maxs then
+					posCol = COLOR_INVALID
+				end
+				picktext.AddLine(lines, posStr, "Position: ", COLOR_FIELD, posCol)
+
+				if ent.angle then
+					local angle = Format(FORMAT_3, Angle_Unpack(ang))
+					picktext.AddLine(lines, angle, "Angle: ", COLOR_FIELD, COLOR_TEXT)
+				end
+
+				if not ent.bounds_fallback then
+					local mins = Format(FORMAT_3, Vector_Unpack(ent.mins))
+					local maxs = Format(FORMAT_3, Vector_Unpack(ent.maxs))
+					picktext.AddLine(lines, maxs, "Maxs: ", COLOR_FIELD, COLOR_TEXT)
+					picktext.AddLine(lines, mins, "Mins: ", COLOR_FIELD, COLOR_TEXT)
+				end
+
+				picktext.AddLine(lines, ent.text, "Text: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, ent.startvalue, "Starting Value: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, ent.minvalue, "Min Value: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, ent.maxvalue, "Max Value: ", COLOR_FIELD, COLOR_TEXT)
+				picktext.AddLine(lines, ent.compvalue, "Compare Value: ", COLOR_FIELD, COLOR_TEXT)
+
+				picktext.AddLine(lines, ent.target, "Target: ", COLOR_TARGET, ent.target_invalid and COLOR_INVALID or COLOR_TEXT)
+
+				if ent.outputs ~= nil and next(ent.outputs) ~= nil then
+					for on, outputs in next, ent.outputs do
+						if isstring(outputs) then
+							picktext.AddLine(lines, outputs:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						else
+							for _, output in ipairs(outputs) do
+								picktext.AddLine(lines, output:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+							end
 						end
 					end
 				end
-			end
 
-			picktext.AddBlock(lines, center.x, center.y)
+				if input.IsKeyDown(KEY_LALT) and ent.kvs ~= nil and next(ent.kvs) ~= nil then
+					picktext.AddLine(lines, "", "", COLOR_TEXT, COLOR_TEXT)
+					for k, v in SortedPairs(ent.kvs) do
+						picktext.AddLine(lines, v, k .. ": ", COLOR_FIELD, COLOR_TEXT)
+					end
+				end
+
+				picktext.AddBlock(lines, center.x, center.y)
+			end
 		end
+
+		to_process = nil
+		axes = nil
 	end
 end)
 
@@ -863,21 +915,20 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 	local meshes = {}
 	local has_hit = false
 
-	local eyepos = EyePos()
-	local eyeang = EyeAngles()
-	local fwd = Angle_Forward(eyeang)
-	local forward = fwd * 32768
-
 	for _, ent in ipairs(MAP_ENTS) do
 		local entity = ent.entity
-		local isvalid = IsValid(entity)
+		local isvalid = entity ~= nil and entity:IsValid()
 		local pos = isvalid and entity:GetPos() or ent.origin
+
+		local scrpos = Vector_ToScreen(pos)
+		if not scrpos.visible then continue end
+
 		local ang = isvalid and entity:GetAngles() or (ent.angle or ANGLE_ZERO)
 
 		local hitpos = util_IntersectRayWithOBB(eyepos, forward, pos, ang, ent.mins, ent.maxs)
 
-		local dist = Vector_Distance(eyepos, pos)
-		if dist > 32768 then continue end
+		local dist = Vector_DistToSqr(eyepos, pos)
+		if dist > MAX_DIST_SQR then continue end
 
 		if ent.model ~= nil then
 			if ent.model:find("^%*") and hitpos ~= nil then
@@ -892,10 +943,7 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 		local mdl = isvalid and entity:GetModel()
 		if isvalid and mdl and mdl ~= "" then continue end
 
-		if dist > 512 then continue end
-
-		local spos = Vector_ToScreen(pos)
-		if not spos.visible then continue end
+		if dist > 262144 then continue end -- 512^2
 
 		local hit = hitpos ~= nil
 		if hit then
@@ -907,40 +955,53 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 			pos = pos,
 			hit = hit,
 		}
+		if ent._drawcolor then
+			icon.color = ent._drawcolor
+		end
 
 		to_render[#to_render + 1] = icon
 	end
 
-	Angle_RotateAroundAxis(eyeang, fwd, 90)
-	Angle_RotateAroundAxis(eyeang, Angle_Right(eyeang), 90)
+	local iconang = eyeang * 1
+	Angle_RotateAroundAxis(iconang, Angle_Forward(iconang), 90)
+	Angle_RotateAroundAxis(iconang, Angle_Right(iconang), 90)
 
 	local tone = render.GetToneMappingScaleLinear()
 	render.SetToneMappingScaleLinear(NO_HDR)
-	for _, icon in ipairs(to_render) do
-		local alpha = icon.hit and 255 or 72
-		if not has_hit then
-			alpha = 255
+	if #to_render > 0 then
+		for _, icon in ipairs(to_render) do
+			local alpha = icon.hit and 255 or 72
+			if not has_hit then
+				alpha = 255
+			end
+
+			local icon_mat = ENT_ICONS[icon.class] or ICON_DEFAULT
+
+			cam_Start3D2D(icon.pos, iconang, 0.5)
+			render_PushFilterMag(TEXFILTER_POINT)
+			render_PushFilterMin(TEXFILTER_POINT)
+
+			surface_SetMaterial(icon_mat)
+			if COLORABLE_CLASSES[icon.class] and icon.color then
+				local r, g, b = icon.color:Unpack()
+				surface_SetDrawColor(r, g, b, alpha)
+			else
+				surface_SetDrawColor(255, 255, 255, alpha)
+			end
+			surface_DrawTexturedRect(-8, -8, 16, 16)
+
+			render_PopFilterMin()
+			render_PopFilterMag()
+			cam_End3D2D()
 		end
-
-		local icon_mat = ENT_ICONS[icon.class] or ICON_DEFAULT
-
-		cam_Start3D2D(icon.pos, eyeang, 0.5)
-		render_PushFilterMag(TEXFILTER_POINT)
-		render_PushFilterMin(TEXFILTER_POINT)
-
-		surface_SetMaterial(icon_mat)
-		surface_SetDrawColor(255, 255, 255, alpha)
-		surface_DrawTexturedRect(-8, -8, 16, 16)
-
-		render_PopFilterMin()
-		render_PopFilterMag()
-		cam_End3D2D()
 	end
 
-	render.SetColorMaterial()
-	for _, obj in ipairs(meshes) do
-		if not obj:IsValid() then continue end
-		obj:Draw()
+	if #meshes > 0 then
+		render.SetMaterial(MAT_MESH)
+		for _, obj in ipairs(meshes) do
+			if not obj:IsValid() then continue end
+			obj:Draw()
+		end
 	end
 	render.SetToneMappingScaleLinear(tone)
 end)
