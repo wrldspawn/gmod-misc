@@ -630,22 +630,6 @@ local lply = LocalPlayer()
 local MATRIX = Matrix()
 local textPos = Vector()
 
-local drawself = false
-local eyepos = EyePos()
-local eyeang = EyeAngles()
-local forward = Angle_Forward(eyeang) * MAX_DIST
-local myPos = Vector()
-
-hook.Add("PlayerPostThink", TAG, function(ply)
-	eyepos = EyePos()
-	eyeang = EyeAngles()
-
-	forward = Angle_Forward(eyeang) * MAX_DIST
-
-	myPos = ply:GetPos()
-	drawself = ply:ShouldDrawLocalPlayer()
-end)
-
 hook.Add("HUDPaint", TAG, function()
 	if PICKER_ENABLED then
 		if not lply:IsValid() then
@@ -656,6 +640,12 @@ hook.Add("HUDPaint", TAG, function()
 		local to_process = {}
 		local axes = {}
 		local has_hit = false
+
+		local params = picktext.PlayerParams
+		local eyepos = params.ViewPos
+		local forward = params.Forward
+		local myPos = params.Pos
+		local drawself = params.Drawing
 
 		for _, ent in ipairs(MAP_ENTS) do
 			local entity = ent.entity
@@ -914,6 +904,11 @@ hook.Add("PostDrawTranslucentRenderables", TAG, function(depth, skybox, skybox3d
 	local to_render = {}
 	local meshes = {}
 	local has_hit = false
+
+	local params = picktext.PlayerParams
+	local eyepos = params.ViewPos
+	local eyeang = params.ViewAng
+	local forward = params.Forward
 
 	for _, ent in ipairs(MAP_ENTS) do
 		local entity = ent.entity

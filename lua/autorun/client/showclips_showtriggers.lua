@@ -342,6 +342,30 @@ local POINT_TYPES = {
 	"point_push"
 }
 
+local KNOWN_KVS = {
+	classname = true,
+	targetname = true,
+	filtername = true,
+	origin = true,
+	angles = true,
+	model = true,
+	target = true,
+	landmark = true,
+	speed = true,
+	magnitude = true,
+	enabled = true,
+	startdisabled = true,
+	StartDisabled = true,
+	pushdir = true,
+	radius = true,
+	TriggerRadius = true,
+	DamageRadius = true,
+	EatRadius = true,
+	mins = true,
+	maxs = true,
+	hammerId = true, -- duplicated mapCreationId
+}
+
 local function collectTriggerBrushes()
 	fixBrushModels()
 
@@ -414,10 +438,19 @@ local function collectTriggerBrushes()
 			speed = trigger.speed or trigger.magnitude,
 			disabled = tobool(trigger.startdisabled ~= nil and trigger.startdisabled or trigger.StartDisabled),
 			outputs = {},
+			kvs = {},
 		}
 		for k, v in next, trigger do
-			if not string.match(k, "^On") then continue end
-			if string.lower(k) == "onlyfallingplayers" then continue end
+			if not string.match(k, "^On") then
+				if not KNOWN_KVS[k] then
+					info.kvs[k] = tostring(v)
+				end
+				continue
+			end
+			if string.lower(k) == "onlyfallingplayers" then
+				info.kvs[k] = tostring(v)
+				continue
+			end
 			info.outputs[k] = v
 		end
 
@@ -452,7 +485,8 @@ local function collectTriggerBrushes()
 				pos = trigger.origin,
 				radius = radius,
 				once = tobool(trigger.TriggerOnce),
-				outputs = {}
+				outputs = {},
+				kvs = {},
 			}
 			point_triggers[#point_triggers + 1] = point
 
@@ -469,6 +503,7 @@ local function collectTriggerBrushes()
 				speed = trigger.speed or trigger.magnitude,
 				disabled = tobool(trigger.startdisabled ~= nil and trigger.startdisabled or trigger.StartDisabled),
 				outputs = {},
+				kvs = {},
 			}
 
 			if trigger.enabled ~= nil and not tobool(trigger.enabled) then
@@ -476,7 +511,13 @@ local function collectTriggerBrushes()
 			end
 
 			for k, v in next, trigger do
-				if not string.match(k, "^On") then continue end
+				if not string.match(k, "^On") then
+					if not KNOWN_KVS[k] then
+						info.kvs[k] = tostring(v)
+						point.kvs[k] = tostring(v)
+					end
+					continue
+				end
 				info.outputs[k] = v
 				point.outputs[k] = v
 			end
@@ -801,18 +842,23 @@ local showclips = false
 local showtriggers = false
 
 local clip_commands = {
-	sm_showbrushes = true,
-	sm_showclips = true,
-	sm_showclipbrushes = true,
-	sm_showplayerclips = true,
-	sm_scb = true,
-	sm_spc = true,
+	"sm_showbrushes",
+	"sm_showclips",
+	"sm_showclipbrushes",
+	"sm_showplayerclips",
+	"sm_scb",
+	"sm_spc",
+	"r_drawclipbrushes_lua",
 }
 
 local function toggleclips()
 	if #showclips_clipMeshes == 0 then
 		LocalPlayer():ChatPrint("Generating clip brush meshes, please wait...")
 		generateClipMeshes()
+	end
+	if #showclips_clipMeshes == 0 then
+		LocalPlayer():ChatPrint("Map does not have any clip brushes.")
+		return
 	end
 
 	if showclips then
@@ -824,20 +870,25 @@ local function toggleclips()
 	end
 end
 
-for cmd in next, clip_commands do
+for _, cmd in ipairs(clip_commands) do
 	concommand.Add(cmd, toggleclips)
 end
 
 local trigger_commands = {
-	sm_showtriggers = true,
-	sm_triggers = true,
-	sm_st = true,
+	"sm_showtriggers",
+	"sm_triggers",
+	"sm_st",
+	"showtriggers_lua",
 }
 
 local function toggletriggers()
 	if #showtriggers_triggerMeshes == 0 then
 		LocalPlayer():ChatPrint("Generating trigger meshes, please wait...")
 		generateTriggerMeshes()
+	end
+	if #showtriggers_triggerMeshes == 0 then
+		LocalPlayer():ChatPrint("Map does not have any triggers.")
+		return
 	end
 
 	if showtriggers then
@@ -849,7 +900,7 @@ local function toggletriggers()
 	end
 end
 
-for cmd in next, trigger_commands do
+for _, cmd in ipairs(trigger_commands) do
 	concommand.Add(cmd, toggletriggers)
 end
 
@@ -906,8 +957,9 @@ hook.Add("HUDPaint", "showtriggers", function()
 	if showtriggers and developer:GetBool() then
 		local to_render = {}
 
-		local eyepos = LocalPlayer():EyePos()
-		local forward = LocalPlayer():EyeAngles():Forward() * 32768
+		local params = picktext.PlayerParams
+		local eyepos = params.ViewPos
+		local forward = params.Forward
 
 		for _, trigger in ipairs(trigger_info) do
 			local hitpos = util.IntersectRayWithOBB(eyepos, forward, trigger.origin, ANGLE_ZERO, trigger.mins, trigger.maxs)
@@ -992,13 +1044,22 @@ hook.Add("HUDPaint", "showtriggers", function()
 			picktext.AddLine(lines, trigger.target, "Destination: ", COLOR_DEST,
 				trigger.target_invalid and COLOR_INVALID or COLOR_TEXT)
 
-			for on, outputs in next, trigger.outputs do
-				if not istable(outputs) then
-					picktext.AddLine(lines, tostring(outputs):gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
-				else
-					for _, output in ipairs(outputs) do
-						picktext.AddLine(lines, output:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+			if next(trigger.outputs) ~= nil then
+				for on, outputs in next, trigger.outputs do
+					if not istable(outputs) then
+						picktext.AddLine(lines, tostring(outputs):gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+					else
+						for _, output in ipairs(outputs) do
+							picktext.AddLine(lines, output:gsub("\x1b", ":"), on .. ": ", COLOR_OUTPUT, COLOR_TEXT)
+						end
 					end
+				end
+			end
+
+			if input.IsKeyDown(KEY_LALT) and next(trigger.kvs) ~= nil then
+				picktext.AddLine(lines, "", "", COLOR_TEXT, COLOR_TEXT)
+				for k, v in SortedPairs(trigger.kvs) do
+					picktext.AddLine(lines, v, k .. ": ", COLOR_FIELD, COLOR_TEXT)
 				end
 			end
 

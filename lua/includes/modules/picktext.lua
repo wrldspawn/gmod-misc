@@ -195,7 +195,7 @@ hook.Add("HUDPaint", TAG, function()
 
 	for i, block in ipairs(RenderQueue) do
 		if #RenderQueue == 1 then
-			_toRender[#_toRender + 1] = block
+			_toRender[1] = block
 			break
 		end
 
@@ -279,5 +279,39 @@ hook.Add("HUDPaint", TAG, function()
 		mindist, nexty = RenderBlock(block, true, mindist, nexty)
 	end
 
-	table.Empty(RenderQueue)
+	RenderQueue = {}
+end)
+
+---@class PlayerParams
+---@field ViewPos Vector
+---@field ViewAng Angle
+---@field Forward Vector
+---@field Pos Vector
+---@field Drawing boolean
+
+---@type PlayerParams
+PlayerParams = {
+	ViewPos = Vector(),
+	ViewAng = Angle(),
+	Forward = Vector(),
+	Pos = Vector(),
+	Drawing = false,
+}
+
+local MAX_DIST = 32768
+hook.Add("PlayerPostThink", TAG, function(ply)
+	local view = render.GetViewSetup()
+	PlayerParams.ViewPos = view.origin
+	PlayerParams.ViewAng = view.angles
+
+	if vgui.CursorVisible() then
+		local cx, cy = input.GetCursorPos()
+		local aim = util.AimVector(view.angles, view.fov, cx, cy, ScrW(), ScrH())
+		PlayerParams.Forward = aim * MAX_DIST
+	else
+		PlayerParams.Forward = PlayerParams.ViewAng:Forward() * MAX_DIST
+	end
+
+	PlayerParams.Pos = ply:GetPos()
+	PlayerParams.Drawing = ply:ShouldDrawLocalPlayer()
 end)
